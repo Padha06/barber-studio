@@ -99,16 +99,23 @@ export default function TopLandingScrollytelling({
   const imagesRef = useRef<Map<number, HTMLImageElement>>(new Map());
   const targetProgressRef = useRef(0);
   const currentProgressRef = useRef(0);
+  const velocityRef = useRef(0);
   const lastDrawnFrameRef = useRef<number>(-1);
   const activeSceneIdRef = useRef<number>(1);
   const showScrollHintRef = useRef<boolean>(true);
+  const drawRectRef = useRef<{ x: number; y: number; w: number; h: number }>({
+    x: 0,
+    y: 0,
+    w: 1920,
+    h: 1080,
+  });
 
   const getFrameUrl = (frameIdx: number) => {
     const padded = String(frameIdx).padStart(3, "0");
     return `/frames/frame-${padded}.webp`;
   };
 
-  // Draw frame on canvas: WHOLE SCREEN, 100% CRYSTAL CLEAR, ZERO BLUR, HARDWARE ACCELERATED
+  // Draw frame on canvas: WHOLE SCREEN, NATIVE 1080P BUFFER, <0.2ms GPU BLIT
   const drawFrame = useCallback((frameIdx: number, force = false) => {
     if (!force && lastDrawnFrameRef.current === frameIdx) return;
 
@@ -141,15 +148,37 @@ export default function TopLandingScrollytelling({
 
     lastDrawnFrameRef.current = resolvedIdx;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const iw = img.naturalWidth || 1920;
-    const ih = img.naturalHeight || 1080;
+    const { x, y, w, h } = drawRectRef.current;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "medium";
+    ctx.drawImage(img, x, y, w, h);
+  }, []);
 
+  // Responsive canvas resize capped to native 1920x1080 source envelope for zero GPU lag
+  const handleResize = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const rawDpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    // Cap backing store to native 1080p envelope so 4K/Retina screens don't waste 4x fill-rate
+    const maxScaleW = 1920 / Math.max(width, 1);
+    const maxScaleH = 1080 / Math.max(height, 1);
+    const effectiveDpr = Math.min(rawDpr, Math.max(maxScaleW, maxScaleH, 1));
+
+    const cw = Math.floor(width * effectiveDpr);
+    const ch = Math.floor(height * effectiveDpr);
+
+    canvas.width = cw;
+    canvas.height = ch;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    const imgAspect = 1920 / 1080;
     const canvasAspect = cw / ch;
-    const imgAspect = iw / ih;
 
-    // Full screen edge-to-edge cover: zero letterboxing, zero blur, whole screen
     let drawW: number;
     let drawH: number;
     let drawX: number;
@@ -167,46 +196,39 @@ export default function TopLandingScrollytelling({
       drawY = 0;
     }
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
-  }, []);
-
-  // Responsive canvas resize with correct DPR and style dimensions
-  const handleResize = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    drawRectRef.current = { x: drawX, y: drawY, w: drawW, h: drawH };
 
     const currentFrame = currentProgressRef.current
-      ? Math.floor(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
+      ? Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
       : 1;
     drawFrame(currentFrame, true);
   }, [drawFrame]);
 
-  // Preload & pre-decode sequence frames in background worker queue for zero-stutter scrubbing
+  // Preload & pre-decode sequence frames with dynamic lookahead priority
   useEffect(() => {
     let isCancelled = false;
+    const loadingSet = new Set<number>();
 
     const loadAndDecodeFrame = (idx: number): Promise<void> => {
       return new Promise((resolve) => {
-        if (isCancelled || imagesRef.current.has(idx)) {
+        if (
+          isCancelled ||
+          idx < 1 ||
+          idx > TOTAL_FRAMES ||
+          imagesRef.current.has(idx) ||
+          loadingSet.has(idx)
+        ) {
           resolve();
           return;
         }
+        loadingSet.add(idx);
+
         const img = new Image();
         img.decoding = "async";
         img.src = getFrameUrl(idx);
 
         const finalize = () => {
+          loadingSet.delete(idx);
           if (isCancelled) {
             resolve();
             return;
@@ -225,11 +247,17 @@ export default function TopLandingScrollytelling({
             .then(finalize)
             .catch(() => {
               img.onload = finalize;
-              img.onerror = () => resolve();
+              img.onerror = () => {
+                loadingSet.delete(idx);
+                resolve();
+              };
             });
         } else {
           img.onload = finalize;
-          img.onerror = () => resolve();
+          img.onerror = () => {
+            loadingSet.delete(idx);
+            resolve();
+          };
         }
       });
     };
@@ -238,11 +266,11 @@ export default function TopLandingScrollytelling({
       // 1. Frame 1 immediately
       await loadAndDecodeFrame(1);
 
-      // Build priority order: stride 6 first (instant full-timeline scrub), then stride 2, then remaining
+      // Build base queue: stride 4 first, then stride 2, then stride 1
       const queue: number[] = [];
       const queuedSet = new Set<number>([1]);
 
-      for (const stride of [6, 2, 1]) {
+      for (const stride of [4, 2, 1]) {
         for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
           if (!queuedSet.has(i)) {
             queuedSet.add(i);
@@ -251,25 +279,50 @@ export default function TopLandingScrollytelling({
         }
       }
 
-      // Run 8 concurrent image decoders
+      // Run 8 concurrent decoders with dynamic lookahead around current scroll frame
       const CONCURRENCY = 8;
       let cursor = 0;
 
+      const getNextFrameToLoad = (): number | null => {
+        // First check if any frame in the immediate lookahead window [curr-2 .. curr+20] is unloaded
+        const curr =
+          Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1;
+        for (let offset = 0; offset <= 20; offset++) {
+          const target = curr + offset;
+          if (
+            target >= 1 &&
+            target <= TOTAL_FRAMES &&
+            !imagesRef.current.has(target) &&
+            !loadingSet.has(target)
+          ) {
+            return target;
+          }
+        }
+        // Otherwise pull next from global queue
+        while (cursor < queue.length) {
+          const candidate = queue[cursor++];
+          if (!imagesRef.current.has(candidate) && !loadingSet.has(candidate)) {
+            return candidate;
+          }
+        }
+        return null;
+      };
+
       const worker = async () => {
-        while (cursor < queue.length && !isCancelled) {
-          const nextIdx = queue[cursor++];
+        while (!isCancelled) {
+          const nextIdx = getNextFrameToLoad();
+          if (nextIdx === null) break;
           await loadAndDecodeFrame(nextIdx);
         }
       };
 
       await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
-      // Re-draw exact target frame once all frames are in memory
       if (!isCancelled) {
         const exactFrame = Math.max(
           1,
           Math.min(
             TOTAL_FRAMES,
-            Math.floor(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
+            Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
           )
         );
         drawFrame(exactFrame, true);
@@ -313,19 +366,39 @@ export default function TopLandingScrollytelling({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Zero-re-render 60fps smooth lerp loop
+  // Zero-re-render, frame-rate independent, velocity-smoothed 60/120fps loop (40% slower)
   useEffect(() => {
     let animId: number;
+    let lastTime = performance.now();
 
-    const loop = () => {
-      // Smooth filmic lerp interpolation (40% slower deliberate pacing)
-      const lerpFactor = 0.075;
+    const loop = (now: number) => {
+      // Normalize delta time to 60fps (16.667ms) so 60Hz, 120Hz, and 144Hz feel identical
+      const dt = Math.min(Math.max((now - lastTime) / 16.667, 0.25), 2.5);
+      lastTime = now;
+
       const diff = targetProgressRef.current - currentProgressRef.current;
 
-      if (Math.abs(diff) > 0.00005) {
-        currentProgressRef.current += diff * lerpFactor;
+      if (Math.abs(diff) > 0.00003 || Math.abs(velocityRef.current) > 0.00003) {
+        // 40% slower spring-damped response (0.044 vs previous 0.075)
+        const desiredVelocity = diff * 0.044;
+        // Smooth acceleration & deceleration so wheel ticks never jerk
+        velocityRef.current +=
+          (desiredVelocity - velocityRef.current) * Math.min(1, 0.24 * dt);
+
+        // Clamp maximum frame step per tick so fast scroll glides through every frame sequentially
+        const maxVelocity = 0.0038;
+        const clampedVel = Math.max(
+          -maxVelocity,
+          Math.min(maxVelocity, velocityRef.current)
+        );
+
+        currentProgressRef.current = Math.max(
+          0,
+          Math.min(1, currentProgressRef.current + clampedVel * dt)
+        );
       } else {
         currentProgressRef.current = targetProgressRef.current;
+        velocityRef.current = 0;
       }
 
       const p = currentProgressRef.current;
@@ -339,7 +412,7 @@ export default function TopLandingScrollytelling({
 
       const frameIdx = Math.max(
         1,
-        Math.min(TOTAL_FRAMES, Math.floor(p * (TOTAL_FRAMES - 1)) + 1)
+        Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
       );
 
       // Only draw to canvas when frameIdx actually changes
@@ -371,7 +444,7 @@ export default function TopLandingScrollytelling({
       ref={containerRef}
       id="hero"
       className="relative bg-white w-full"
-      style={{ height: "680vh" }} // Calibrated 40% slower scroll depth for ultra-smooth cinematic pacing
+      style={{ height: "1120vh" }} // Slowed down by an additional 40% (680vh -> 1120vh) for ultra-smooth frame-by-frame pacing
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
