@@ -267,7 +267,8 @@ export default function TopLandingScrollytelling({
     let animId: number;
 
     const loop = () => {
-      const lerpFactor = 0.12;
+      // Smooth filmic lerp interpolation (calibrated for deliberate pacing)
+      const lerpFactor = 0.075;
       const diff = targetProgressRef.current - currentProgressRef.current;
 
       if (Math.abs(diff) > 0.0001) {
@@ -310,7 +311,7 @@ export default function TopLandingScrollytelling({
       ref={containerRef}
       id="hero"
       className="relative bg-white w-full"
-      style={{ height: "450vh" }}
+      style={{ height: "680vh" }} // Calibrated 40% slower scroll depth for cinematic pacing
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-[100dvh] overflow-hidden flex items-center justify-center bg-[#080808]">
