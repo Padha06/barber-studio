@@ -103,6 +103,9 @@ export default function TopLandingScrollytelling({
   const lastDrawnFrameRef = useRef<number>(-1);
   const activeSceneIdRef = useRef<number>(1);
   const showScrollHintRef = useRef<boolean>(true);
+  const isMobileRef = useRef<boolean>(false);
+  const lastWidthRef = useRef<number>(0);
+  const lockedViewportHeightRef = useRef<number>(0);
   const drawRectRef = useRef<{ x: number; y: number; w: number; h: number }>({
     x: 0,
     y: 0,
@@ -110,12 +113,14 @@ export default function TopLandingScrollytelling({
     h: 1080,
   });
 
-  const getFrameUrl = (frameIdx: number) => {
+  const getFrameUrl = (frameIdx: number, isMobile: boolean) => {
     const padded = String(frameIdx).padStart(3, "0");
-    return `/frames/frame-${padded}.webp`;
+    return isMobile
+      ? `/frames-mobile/frame-${padded}.webp`
+      : `/frames/frame-${padded}.webp`;
   };
 
-  // Draw frame on canvas: WHOLE SCREEN, NATIVE 1080P BUFFER, <0.2ms GPU BLIT
+  // Draw frame on canvas: WHOLE SCREEN, NATIVE BUFFER, <0.2ms GPU BLIT
   const drawFrame = useCallback((frameIdx: number, force = false) => {
     if (!force && lastDrawnFrameRef.current === frameIdx) return;
 
@@ -154,60 +159,83 @@ export default function TopLandingScrollytelling({
     ctx.drawImage(img, x, y, w, h);
   }, []);
 
-  // Responsive canvas resize capped to native 1920x1080 source envelope for zero GPU lag
-  const handleResize = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Responsive canvas resize capped to native source envelope (1920x1080 desktop / 720x1280 mobile)
+  const handleResize = useCallback(
+    (forceInit = false) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const rawDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const isMobile = width < 768;
 
-    // Cap backing store to native 1080p envelope so 4K/Retina screens don't waste 4x fill-rate
-    const maxScaleW = 1920 / Math.max(width, 1);
-    const maxScaleH = 1080 / Math.max(height, 1);
-    const effectiveDpr = Math.min(rawDpr, Math.max(maxScaleW, maxScaleH, 1));
+      // On mobile browsers, ignore vertical-only resize events caused by address bar hiding/showing during scroll
+      if (
+        !forceInit &&
+        isMobile &&
+        lastWidthRef.current > 0 &&
+        Math.abs(width - lastWidthRef.current) < 2
+      ) {
+        return;
+      }
 
-    const cw = Math.floor(width * effectiveDpr);
-    const ch = Math.floor(height * effectiveDpr);
+      lastWidthRef.current = width;
+      lockedViewportHeightRef.current = height;
+      isMobileRef.current = isMobile;
 
-    canvas.width = cw;
-    canvas.height = ch;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+      const rawDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const nativeW = isMobile ? 720 : 1920;
+      const nativeH = isMobile ? 1280 : 1080;
 
-    const imgAspect = 1920 / 1080;
-    const canvasAspect = cw / ch;
+      // Cap backing store to native source envelope so screens don't waste GPU fill-rate
+      const maxScaleW = nativeW / Math.max(width, 1);
+      const maxScaleH = nativeH / Math.max(height, 1);
+      const effectiveDpr = Math.min(rawDpr, Math.max(maxScaleW, maxScaleH, 1));
 
-    let drawW: number;
-    let drawH: number;
-    let drawX: number;
-    let drawY: number;
+      const cw = Math.floor(width * effectiveDpr);
+      const ch = Math.floor(height * effectiveDpr);
 
-    if (canvasAspect > imgAspect) {
-      drawW = cw;
-      drawH = cw / imgAspect;
-      drawX = 0;
-      drawY = (ch - drawH) / 2;
-    } else {
-      drawH = ch;
-      drawW = ch * imgAspect;
-      drawX = (cw - drawW) / 2;
-      drawY = 0;
-    }
+      canvas.width = cw;
+      canvas.height = ch;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
 
-    drawRectRef.current = { x: drawX, y: drawY, w: drawW, h: drawH };
+      const imgAspect = nativeW / nativeH;
+      const canvasAspect = cw / ch;
 
-    const currentFrame = currentProgressRef.current
-      ? Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
-      : 1;
-    drawFrame(currentFrame, true);
-  }, [drawFrame]);
+      let drawW: number;
+      let drawH: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (canvasAspect > imgAspect) {
+        drawW = cw;
+        drawH = cw / imgAspect;
+        drawX = 0;
+        drawY = (ch - drawH) / 2;
+      } else {
+        drawH = ch;
+        drawW = ch * imgAspect;
+        drawX = (cw - drawW) / 2;
+        drawY = 0;
+      }
+
+      drawRectRef.current = { x: drawX, y: drawY, w: drawW, h: drawH };
+
+      const currentFrame = currentProgressRef.current
+        ? Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
+        : 1;
+      drawFrame(currentFrame, true);
+    },
+    [drawFrame]
+  );
 
   // Preload & pre-decode sequence frames with dynamic lookahead priority
   useEffect(() => {
     let isCancelled = false;
     const loadingSet = new Set<number>();
+    const isMobile = window.innerWidth < 768;
+    isMobileRef.current = isMobile;
 
     const loadAndDecodeFrame = (idx: number): Promise<void> => {
       return new Promise((resolve) => {
@@ -225,7 +253,7 @@ export default function TopLandingScrollytelling({
 
         const img = new Image();
         img.decoding = "async";
-        img.src = getFrameUrl(idx);
+        img.src = getFrameUrl(idx, isMobile);
 
         const finalize = () => {
           loadingSet.delete(idx);
@@ -235,7 +263,7 @@ export default function TopLandingScrollytelling({
           }
           imagesRef.current.set(idx, img);
           if (idx === 1) {
-            handleResize();
+            handleResize(true);
             drawFrame(1, true);
           }
           resolve();
@@ -279,12 +307,12 @@ export default function TopLandingScrollytelling({
         }
       }
 
-      // Run 8 concurrent decoders with dynamic lookahead around current scroll frame
-      const CONCURRENCY = 8;
+      // Run concurrent decoders with dynamic lookahead around current scroll frame
+      const CONCURRENCY = isMobile ? 6 : 8;
       let cursor = 0;
 
       const getNextFrameToLoad = (): number | null => {
-        // First check if any frame in the immediate lookahead window [curr-2 .. curr+20] is unloaded
+        // First check if any frame in the immediate lookahead window [curr .. curr+20] is unloaded
         const curr =
           Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1;
         for (let offset = 0; offset <= 20; offset++) {
@@ -338,12 +366,14 @@ export default function TopLandingScrollytelling({
 
   // Resize and orientation change listener
   useEffect(() => {
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-    handleResize();
+    const onResize = () => handleResize(false);
+    const onOrientationChange = () => handleResize(true);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onOrientationChange);
+    handleResize(true);
     return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onOrientationChange);
     };
   }, [handleResize]);
 
@@ -354,7 +384,8 @@ export default function TopLandingScrollytelling({
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
-      const totalScrollable = container.offsetHeight - window.innerHeight;
+      const vh = lockedViewportHeightRef.current || window.innerHeight;
+      const totalScrollable = container.offsetHeight - vh;
       if (totalScrollable <= 0) return;
 
       const progress = Math.max(0, Math.min(1, -rect.top / totalScrollable));
@@ -366,7 +397,7 @@ export default function TopLandingScrollytelling({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Zero-re-render, frame-rate independent, velocity-smoothed 60/120fps loop (40% slower)
+  // Zero-re-render, frame-rate independent, velocity-smoothed 60/120fps loop
   useEffect(() => {
     let animId: number;
     let lastTime = performance.now();
@@ -379,14 +410,16 @@ export default function TopLandingScrollytelling({
       const diff = targetProgressRef.current - currentProgressRef.current;
 
       if (Math.abs(diff) > 0.00003 || Math.abs(velocityRef.current) > 0.00003) {
-        // 40% slower spring-damped response (0.044 vs previous 0.075)
-        const desiredVelocity = diff * 0.044;
-        // Smooth acceleration & deceleration so wheel ticks never jerk
-        velocityRef.current +=
-          (desiredVelocity - velocityRef.current) * Math.min(1, 0.24 * dt);
+        // Desktop stays at exact 0.044 / 0.0038; Mobile tuned for silky touch momentum
+        const isMob = isMobileRef.current;
+        const springFactor = isMob ? 0.052 : 0.044;
+        const accelBlend = isMob ? 0.28 : 0.24;
+        const maxVelocity = isMob ? 0.0045 : 0.0038;
 
-        // Clamp maximum frame step per tick so fast scroll glides through every frame sequentially
-        const maxVelocity = 0.0038;
+        const desiredVelocity = diff * springFactor;
+        velocityRef.current +=
+          (desiredVelocity - velocityRef.current) * Math.min(1, accelBlend * dt);
+
         const clampedVel = Math.max(
           -maxVelocity,
           Math.min(maxVelocity, velocityRef.current)
@@ -444,10 +477,10 @@ export default function TopLandingScrollytelling({
       ref={containerRef}
       id="hero"
       className="relative bg-white w-full"
-      style={{ height: "1120vh" }} // Slowed down by an additional 40% (680vh -> 1120vh) for ultra-smooth frame-by-frame pacing
+      style={{ height: "1120vh" }}
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
-      <div className="sticky top-0 left-0 w-full h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
+      <div className="sticky top-0 left-0 w-full h-svh md:h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
         {/* Fullscreen Video Canvas: Razor Sharp & 100% Whole Screen (Zero Blur) */}
         <canvas
           ref={canvasRef}
