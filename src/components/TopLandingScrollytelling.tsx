@@ -1,21 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Calendar } from "lucide-react";
+import { Calendar, Sparkles } from "lucide-react";
 
 interface TopLandingScrollytellingProps {
   onBookChair: () => void;
   onExploreServices: () => void;
 }
 
-const TOTAL_FRAMES = 300;
+const TOTAL_FRAMES = 290;
 
 interface CaptionScene {
   id: number;
   tag: string;
+  timecode: string;
   title: string;
   subtitle: string;
-  description: string;
   frameStart: number;
   frameEnd: number;
 }
@@ -23,63 +23,66 @@ interface CaptionScene {
 const SCENES: CaptionScene[] = [
   {
     id: 1,
-    tag: "01 / THE ARRIVAL",
-    title: "WELCOME TO THE ATELIER",
-    subtitle: "Where classic heritage meets modern precision.",
-    description:
-      "Step inside our Mayfair sanctuary. A space created for men who appreciate uncompromising quality and unhurried craft.",
+    tag: "01 / EXTERIOR • NERUL WEST",
+    timecode: "00:00 — 00:01",
+    title: "Where luxury begins.",
+    subtitle: "Welcome to H&S Salon.",
     frameStart: 1,
-    frameEnd: 48,
+    frameEnd: 30,
   },
   {
     id: 2,
     tag: "02 / THE SANCTUARY",
-    title: "ENTER THE STUDIO",
-    subtitle: "A tailored space designed around you.",
-    description:
-      "Dark walnut cabinetry, hand-stitched leather chairs, and warm amber illumination. An acoustic haven away from the noise of the city.",
-    frameStart: 49,
-    frameEnd: 104,
+    timecode: "00:01 — 00:02",
+    title: "Designed for those who notice the details.",
+    subtitle: "Every corner curated with intention.",
+    frameStart: 31,
+    frameEnd: 60,
   },
   {
     id: 3,
-    tag: "03 / THE ART OF THE CUT",
-    title: "PRECISION SKIN FADES",
-    subtitle: "Zero-gap graduation & surgical micro-blends.",
-    description:
-      "Our master barbers sculpt with surgical exactness. Every clipper pass is tailored to your cranial geometry and hair texture.",
-    frameStart: 105,
-    frameEnd: 172,
+    tag: "03 / STYLING STATIONS",
+    timecode: "00:02 — 00:03",
+    title: "Precision. Atmosphere. Presence.",
+    subtitle: "A space that elevates every visit.",
+    frameStart: 61,
+    frameEnd: 90,
   },
   {
     id: 4,
-    tag: "04 / THE RITUAL",
-    title: "HONORING EVERY DETAIL",
-    subtitle: "Soft duster sweeps & straight razor clean-ups.",
-    description:
-      "From steaming eucalyptus hot towels to feather-blade perimeter definition, we treat grooming as an elevated ritual.",
-    frameStart: 173,
-    frameEnd: 224,
+    tag: "04 / BESPOKE CRAFTSMANSHIP",
+    timecode: "00:03 — 00:05",
+    title: "Craftsmanship you can feel.",
+    subtitle: "Every cut. Every line. Perfected.",
+    frameStart: 91,
+    frameEnd: 145,
   },
   {
     id: 5,
-    tag: "05 / THE MASTER ARSENAL",
-    title: "TOOLS OF THE TRADE",
-    subtitle: "Japanese forged steel & pro-grade clippers.",
-    description:
-      "Rotary motor trimmers, hand-honed shears, and small-batch apothecary pomades arranged on chilled Italian marble.",
-    frameStart: 225,
-    frameEnd: 268,
+    tag: "05 / WASH LOUNGE & RITUALS",
+    timecode: "00:05 — 00:07",
+    title: "A ritual of care.",
+    subtitle: "Where your hair finds its best version.",
+    frameStart: 146,
+    frameEnd: 205,
   },
   {
     id: 6,
-    tag: "06 / THE SIGNATURE REVEAL",
-    title: "LOOK SHARP. COMMAND THE ROOM.",
-    subtitle: "Your signature look, perfected.",
-    description:
-      "Impeccable lines and effortless confidence. Reserve your private chair and experience the highest standard of grooming.",
-    frameStart: 269,
-    frameEnd: 300,
+    tag: "06 / MASTER ARSENAL",
+    timecode: "00:07 — 00:08",
+    title: "The tools of excellence.",
+    subtitle: "Only the finest, always chosen with purpose.",
+    frameStart: 206,
+    frameEnd: 235,
+  },
+  {
+    id: 7,
+    tag: "07 / THE FINISHED LOOK",
+    timecode: "00:08 — 00:10",
+    title: "Confidence, redefined.",
+    subtitle: "This is the H&S standard.",
+    frameStart: 236,
+    frameEnd: 290,
   },
 ];
 
@@ -90,27 +93,33 @@ export default function TopLandingScrollytelling({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [currentFrame, setCurrentFrame] = useState(1);
   const [activeScene, setActiveScene] = useState<CaptionScene>(SCENES[0]);
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const [showScrollHint, setShowScrollHint] = useState(true);
 
   const imagesRef = useRef<Map<number, HTMLImageElement>>(new Map());
   const targetProgressRef = useRef(0);
   const currentProgressRef = useRef(0);
+  const lastDrawnFrameRef = useRef<number>(-1);
+  const activeSceneIdRef = useRef<number>(1);
+  const showScrollHintRef = useRef<boolean>(true);
 
   const getFrameUrl = (frameIdx: number) => {
     const padded = String(frameIdx).padStart(3, "0");
-    return `/sequence/ezgif-frame-${padded}.jpg`;
+    return `/frames/frame-${padded}.webp`;
   };
 
-  // Draw frame on canvas: WHOLE SCREEN, 100% CRYSTAL CLEAR, ZERO BLUR
-  const drawFrame = useCallback((frameIdx: number) => {
+  // Draw frame on canvas: WHOLE SCREEN, 100% CRYSTAL CLEAR, ZERO BLUR, HARDWARE ACCELERATED
+  const drawFrame = useCallback((frameIdx: number, force = false) => {
+    if (!force && lastDrawnFrameRef.current === frameIdx) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
     if (!ctx) return;
 
     let img = imagesRef.current.get(frameIdx);
+    let resolvedIdx = frameIdx;
+
     if (!img || !img.complete) {
       let closest = 1;
       let minDiff = 999;
@@ -124,9 +133,13 @@ export default function TopLandingScrollytelling({
         }
       });
       img = imagesRef.current.get(closest);
+      resolvedIdx = closest;
     }
 
     if (!img || !img.complete) return;
+    if (!force && lastDrawnFrameRef.current === resolvedIdx) return;
+
+    lastDrawnFrameRef.current = resolvedIdx;
 
     const cw = canvas.width;
     const ch = canvas.height;
@@ -134,7 +147,7 @@ export default function TopLandingScrollytelling({
     const ih = img.naturalHeight || 1080;
 
     const canvasAspect = cw / ch;
-    const imgAspect = iw / ih; // strictly 16:9
+    const imgAspect = iw / ih;
 
     // Full screen edge-to-edge cover: zero letterboxing, zero blur, whole screen
     let drawW: number;
@@ -173,59 +186,97 @@ export default function TopLandingScrollytelling({
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
 
-    drawFrame(
-      currentProgressRef.current
-        ? Math.floor(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
-        : 1
-    );
+    const currentFrame = currentProgressRef.current
+      ? Math.floor(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
+      : 1;
+    drawFrame(currentFrame, true);
   }, [drawFrame]);
 
-  // Preload sequence frames
+  // Preload & pre-decode sequence frames in background worker queue for zero-stutter scrubbing
   useEffect(() => {
     let isCancelled = false;
 
-    // Load first frame immediately
-    const firstImg = new Image();
-    firstImg.src = getFrameUrl(1);
-    firstImg.onload = () => {
-      if (isCancelled) return;
-      imagesRef.current.set(1, firstImg);
-      handleResize();
-      drawFrame(1);
+    const loadAndDecodeFrame = (idx: number): Promise<void> => {
+      return new Promise((resolve) => {
+        if (isCancelled || imagesRef.current.has(idx)) {
+          resolve();
+          return;
+        }
+        const img = new Image();
+        img.decoding = "async";
+        img.src = getFrameUrl(idx);
+
+        const finalize = () => {
+          if (isCancelled) {
+            resolve();
+            return;
+          }
+          imagesRef.current.set(idx, img);
+          if (idx === 1) {
+            handleResize();
+            drawFrame(1, true);
+          }
+          resolve();
+        };
+
+        if (img.decode) {
+          img
+            .decode()
+            .then(finalize)
+            .catch(() => {
+              img.onload = finalize;
+              img.onerror = () => resolve();
+            });
+        } else {
+          img.onload = finalize;
+          img.onerror = () => resolve();
+        }
+      });
     };
 
-    const loadRemaining = async () => {
-      // Step 1: Every 4th frame for immediate scrub feedback
-      for (let i = 2; i <= TOTAL_FRAMES; i += 4) {
-        if (isCancelled) return;
-        if (!imagesRef.current.has(i)) {
-          const img = new Image();
-          img.src = getFrameUrl(i);
-          img.onload = () => {
-            if (isCancelled) return;
-            imagesRef.current.set(i, img);
-          };
-        }
-      }
+    const runPreloadPipeline = async () => {
+      // 1. Frame 1 immediately
+      await loadAndDecodeFrame(1);
 
-      // Step 2: All remaining frames in sequence
-      for (let i = 2; i <= TOTAL_FRAMES; i++) {
-        if (isCancelled) return;
-        if (!imagesRef.current.has(i)) {
-          const img = new Image();
-          img.src = getFrameUrl(i);
-          img.onload = () => {
-            if (isCancelled) return;
-            imagesRef.current.set(i, img);
-          };
-          if (i % 20 === 0) {
-            await new Promise((r) => setTimeout(r, 20));
+      // Build priority order: stride 6 first (instant full-timeline scrub), then stride 2, then remaining
+      const queue: number[] = [];
+      const queuedSet = new Set<number>([1]);
+
+      for (const stride of [6, 2, 1]) {
+        for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
+          if (!queuedSet.has(i)) {
+            queuedSet.add(i);
+            queue.push(i);
           }
         }
       }
+
+      // Run 8 concurrent image decoders
+      const CONCURRENCY = 8;
+      let cursor = 0;
+
+      const worker = async () => {
+        while (cursor < queue.length && !isCancelled) {
+          const nextIdx = queue[cursor++];
+          await loadAndDecodeFrame(nextIdx);
+        }
+      };
+
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+      // Re-draw exact target frame once all frames are in memory
+      if (!isCancelled) {
+        const exactFrame = Math.max(
+          1,
+          Math.min(
+            TOTAL_FRAMES,
+            Math.floor(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
+          )
+        );
+        drawFrame(exactFrame, true);
+      }
     };
 
-    loadRemaining();
+    runPreloadPipeline();
 
     return () => {
       isCancelled = true;
@@ -262,36 +313,45 @@ export default function TopLandingScrollytelling({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Smooth lerp loop
+  // Zero-re-render 60fps smooth lerp loop
   useEffect(() => {
     let animId: number;
 
     const loop = () => {
-      // Smooth filmic lerp interpolation (calibrated for deliberate pacing)
+      // Smooth filmic lerp interpolation (40% slower deliberate pacing)
       const lerpFactor = 0.075;
       const diff = targetProgressRef.current - currentProgressRef.current;
 
-      if (Math.abs(diff) > 0.0001) {
+      if (Math.abs(diff) > 0.00005) {
         currentProgressRef.current += diff * lerpFactor;
       } else {
         currentProgressRef.current = targetProgressRef.current;
       }
 
       const p = currentProgressRef.current;
-      setScrollProgress(p);
+
+      // Toggle scroll hint only when crossing threshold
+      const shouldShowHint = p < 0.04;
+      if (shouldShowHint !== showScrollHintRef.current) {
+        showScrollHintRef.current = shouldShowHint;
+        setShowScrollHint(shouldShowHint);
+      }
 
       const frameIdx = Math.max(
         1,
         Math.min(TOTAL_FRAMES, Math.floor(p * (TOTAL_FRAMES - 1)) + 1)
       );
 
-      setCurrentFrame(frameIdx);
+      // Only draw to canvas when frameIdx actually changes
       drawFrame(frameIdx);
 
-      // Match active scene based on frame index
+      // Update React state ONLY when entering a new scene (7 times across entire scroll)
       for (const scene of SCENES) {
         if (frameIdx >= scene.frameStart && frameIdx <= scene.frameEnd) {
-          setActiveScene(scene);
+          if (activeSceneIdRef.current !== scene.id) {
+            activeSceneIdRef.current = scene.id;
+            setActiveScene(scene);
+          }
           break;
         }
       }
@@ -311,67 +371,78 @@ export default function TopLandingScrollytelling({
       ref={containerRef}
       id="hero"
       className="relative bg-white w-full"
-      style={{ height: "680vh" }} // Calibrated 40% slower scroll depth for cinematic pacing
+      style={{ height: "680vh" }} // Calibrated 40% slower scroll depth for ultra-smooth cinematic pacing
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
-      <div className="sticky top-0 left-0 w-full h-[100dvh] overflow-hidden flex items-center justify-center bg-[#080808]">
+      <div className="sticky top-0 left-0 w-full h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
         {/* Fullscreen Video Canvas: Razor Sharp & 100% Whole Screen (Zero Blur) */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block z-0"
         />
 
-        {/* Minimal soft shadow vignette on left/bottom ONLY for text legibility (Zero Box Blur) */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent md:bg-gradient-to-r md:from-black/70 md:via-black/20 md:to-transparent pointer-events-none z-10" />
+        {/* Subtle directional shadow gradient on left/bottom ONLY for text contrast (Zero Blur) */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent md:bg-gradient-to-r md:from-black/65 md:via-black/15 md:to-transparent pointer-events-none z-10" />
 
         {/* ========================================================= */}
-        {/* DESKTOP FLOATING CAPTIONS (MD & UP)                       */}
+        {/* DESKTOP FLOATING SIDE CAPTIONS (MD & UP - No Box Bg)      */}
         {/* ========================================================= */}
         <div className="hidden md:flex relative z-20 w-full max-w-7xl mx-auto px-8 lg:px-16 h-full items-center pointer-events-none">
-          <div className="max-w-xl text-left pointer-events-auto transition-all duration-500">
-            {/* Scene Tag */}
-            <div className="flex items-center gap-2.5 mb-3">
-              <span className="w-2 h-2 rounded-full bg-[#DFC79B] shadow-[0_0_8px_#DFC79B]" />
-              <span className="text-xs sm:text-sm font-mono font-bold tracking-[0.3em] text-[#DFC79B] uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+          <div
+            key={activeScene.id}
+            className="max-w-xl text-left pointer-events-auto transition-all duration-500 animate-fade-in"
+          >
+            {/* Scene Tag & Service Pillars */}
+            <div className="flex items-center gap-3 mb-3">
+              <span className="w-2 h-2 rounded-full bg-[#D4B26A] shadow-[0_0_10px_#D4B26A]" />
+              <span className="text-xs font-mono font-bold tracking-[0.28em] text-[#D4B26A] uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
                 {activeScene.tag}
               </span>
             </div>
 
-            {/* Scene Title */}
-            <h2
+            {/* Scene Main Caption */}
+            <h1
               style={{ fontFamily: "var(--font-serif)" }}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white uppercase tracking-tight leading-[1.05] mb-3 drop-shadow-[0_4px_20px_rgba(0,0,0,0.95)]"
+              className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.08] mb-4 drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
             >
               {activeScene.title}
-            </h2>
+            </h1>
 
-            {/* Scene Subtitle */}
+            {/* Scene Supporting Line */}
             <p
               style={{ fontFamily: "var(--font-serif)" }}
-              className="text-xl md:text-2xl text-[#DFC79B] italic font-normal mb-4 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+              className="text-xl md:text-2xl text-[#EAD39C] italic font-normal mb-5 drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)]"
             >
-              “{activeScene.subtitle}”
+              {activeScene.subtitle}
             </p>
 
-            {/* Scene Description */}
-            <p className="text-sm md:text-base text-[#F5F1EB] leading-relaxed max-w-lg drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] font-light">
-              {activeScene.description}
-            </p>
+            {/* Hair | Skin | Makeup | Nails signature strip on Scene 1 & 7 */}
+            {(activeScene.id === 1 || activeScene.id === 7) && (
+              <div className="flex items-center gap-3 text-[11px] font-mono tracking-[0.3em] uppercase text-white/90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] mb-6">
+                <span>HAIR</span>
+                <span className="text-[#D4B26A]">•</span>
+                <span>SKIN</span>
+                <span className="text-[#D4B26A]">•</span>
+                <span>MAKEUP</span>
+                <span className="text-[#D4B26A]">•</span>
+                <span>NAILS</span>
+              </div>
+            )}
 
-            {/* CTAs on Final Reveal Scene */}
-            {activeScene.id === 6 && (
-              <div className="mt-8 flex items-center gap-4">
+            {/* CTAs on Final Reveal Scene (Scene 7) */}
+            {activeScene.id === 7 && (
+              <div className="mt-6 flex items-center gap-4">
                 <button
                   onClick={onBookChair}
-                  className="px-8 py-4 bg-[#DFC79B] text-[#0F0F0F] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase transition-all shadow-[0_0_25px_rgba(223,199,155,0.4)] cursor-pointer flex items-center justify-center gap-2"
+                  className="px-8 py-4 bg-[#D4B26A] text-[#0B1510] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase transition-all shadow-[0_0_25px_rgba(212,178,106,0.45)] cursor-pointer flex items-center justify-center gap-2 rounded-full"
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>Book Your Chair</span>
+                  <span>Book Appointment</span>
                 </button>
 
                 <button
                   onClick={onExploreServices}
-                  className="px-8 py-4 bg-black/60 border border-white/40 text-white hover:border-[#DFC79B] hover:text-[#DFC79B] backdrop-blur-sm font-semibold text-xs tracking-[0.2em] uppercase transition-colors cursor-pointer"
+                  className="px-8 py-4 bg-black/50 border border-white/40 text-white hover:border-[#D4B26A] hover:text-[#D4B26A] font-semibold text-xs tracking-[0.2em] uppercase transition-colors cursor-pointer rounded-full"
                 >
                   <span>Explore Services</span>
                 </button>
@@ -384,11 +455,14 @@ export default function TopLandingScrollytelling({
         {/* MOBILE FLOATING CAPTIONS (< MD) - WHOLE SCREEN OVERLAY   */}
         {/* ========================================================= */}
         <div className="md:hidden relative z-20 w-full h-full flex flex-col justify-end px-6 pb-24 pointer-events-none">
-          <div className="pointer-events-auto text-left max-w-sm">
+          <div
+            key={activeScene.id}
+            className="pointer-events-auto text-left max-w-sm transition-all duration-500"
+          >
             {/* Scene Tag */}
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[#DFC79B] shadow-[0_0_8px_#DFC79B]" />
-              <span className="text-[11px] font-mono font-bold tracking-[0.25em] text-[#DFC79B] uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+              <span className="w-2 h-2 rounded-full bg-[#D4B26A] shadow-[0_0_8px_#D4B26A]" />
+              <span className="text-[10px] font-mono font-bold tracking-[0.24em] text-[#D4B26A] uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
                 {activeScene.tag}
               </span>
             </div>
@@ -396,7 +470,7 @@ export default function TopLandingScrollytelling({
             {/* Title */}
             <h2
               style={{ fontFamily: "var(--font-serif)" }}
-              className="text-2xl sm:text-3xl font-bold text-white uppercase tracking-tight leading-tight mb-2 drop-shadow-[0_3px_14px_rgba(0,0,0,0.95)]"
+              className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight mb-2 drop-shadow-[0_3px_16px_rgba(0,0,0,0.95)]"
             >
               {activeScene.title}
             </h2>
@@ -404,38 +478,39 @@ export default function TopLandingScrollytelling({
             {/* Subtitle */}
             <p
               style={{ fontFamily: "var(--font-serif)" }}
-              className="text-sm text-[#DFC79B] italic mb-2.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] font-medium"
+              className="text-base text-[#EAD39C] italic mb-3 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] font-medium"
             >
-              “{activeScene.subtitle}”
+              {activeScene.subtitle}
             </p>
 
-            {/* Description */}
-            <p className="text-xs text-[#F5F1EB] leading-relaxed drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] font-light mb-4 line-clamp-3">
-              {activeScene.description}
-            </p>
+            {/* Hair | Skin | Makeup | Nails pill on mobile */}
+            <div className="flex items-center gap-2 text-[10px] font-mono tracking-[0.22em] uppercase text-white/85 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] mb-4">
+              <Sparkles className="w-3 h-3 text-[#D4B26A]" />
+              <span>Hair • Skin • Makeup • Nails</span>
+            </div>
 
-            {/* CTAs on Scene 6 on Mobile */}
-            {activeScene.id === 6 ? (
+            {/* CTAs on Final Scene on Mobile */}
+            {activeScene.id === 7 ? (
               <div className="flex flex-col gap-2.5">
                 <button
                   onClick={onBookChair}
-                  className="w-full py-3.5 bg-[#DFC79B] text-[#0F0F0F] font-bold text-xs tracking-[0.2em] uppercase transition-all shadow-[0_0_20px_rgba(223,199,155,0.4)] flex items-center justify-center gap-2 cursor-pointer rounded-full"
+                  className="w-full py-3.5 bg-[#D4B26A] text-[#0B1510] font-bold text-xs tracking-[0.2em] uppercase transition-all shadow-[0_0_20px_rgba(212,178,106,0.4)] flex items-center justify-center gap-2 cursor-pointer rounded-full"
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>Book Your Chair</span>
+                  <span>Book Appointment</span>
                 </button>
                 <button
                   onClick={onExploreServices}
-                  className="w-full py-3 bg-black/60 border border-white/40 text-white font-semibold text-xs tracking-[0.2em] uppercase backdrop-blur-sm cursor-pointer rounded-full"
+                  className="w-full py-3 bg-black/50 border border-white/40 text-white font-semibold text-xs tracking-[0.2em] uppercase cursor-pointer rounded-full"
                 >
                   <span>Explore Services</span>
                 </button>
               </div>
             ) : (
               /* Mobile Scroll Indicator */
-              <div className="flex items-center gap-2 text-white/70 text-[10px] font-mono tracking-widest uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#DFC79B] animate-pulse" />
-                <span>Swipe down to step inside</span>
+              <div className="flex items-center gap-2 text-white/80 text-[10px] font-mono tracking-widest uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] animate-pulse" />
+                <span>Scroll to experience H&amp;S Salon</span>
               </div>
             )}
           </div>
@@ -443,17 +518,17 @@ export default function TopLandingScrollytelling({
 
         {/* Desktop Minimal Scroll Indicator */}
         <div
-          className={`hidden md:flex absolute bottom-10 left-12 md:left-20 z-20 items-center gap-3 transition-all duration-500 pointer-events-none ${
-            scrollProgress < 0.05
+          className={`hidden md:flex absolute bottom-10 left-8 lg:left-16 z-20 items-center gap-3 transition-all duration-500 pointer-events-none ${
+            showScrollHint
               ? "opacity-100 translate-y-0"
               : "opacity-0 translate-y-4"
           }`}
         >
-          <div className="w-5 h-9 rounded-full border border-white/40 flex items-start justify-center p-1 bg-black/20 backdrop-blur-xs">
-            <div className="w-1.5 h-2.5 bg-[#DFC79B] rounded-full animate-bounce" />
+          <div className="w-5 h-9 rounded-full border border-white/50 flex items-start justify-center p-1 bg-black/25">
+            <div className="w-1.5 h-2.5 bg-[#D4B26A] rounded-full animate-bounce" />
           </div>
           <span className="text-[10px] font-mono tracking-[0.25em] uppercase text-white/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)] font-semibold">
-            Scroll to step inside
+            Scroll to step inside H&amp;S Salon
           </span>
         </div>
       </div>

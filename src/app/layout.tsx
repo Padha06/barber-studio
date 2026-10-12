@@ -15,17 +15,17 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "THE GENTLEMEN'S ROOM | Luxury Barber Studio & Grooming Atelier",
+  title: "H&S SALON | Luxury Hair • Skin • Makeup • Nails",
   description:
-    "An ultra-premium cinematic grooming sanctuary. Precision cuts, bespoke beard sculpting, and an elevated ritual crafted around you.",
+    "Where luxury begins. Welcome to H&S Salon — Nerul's premier destination for precision haircuts, balayage, Keratin & Botox rituals, luxury skin care, bridal makeup, and nail artistry.",
   keywords: [
-    "Barbershop",
+    "H&S Salon",
+    "salonhns",
+    "Luxury Salon Nerul",
+    "Hair Skin Makeup Nails",
+    "Precision Haircut",
+    "Balayage Navi Mumbai",
     "Luxury Grooming",
-    "Skin Fade",
-    "Gentlemen's Barber",
-    "Bespoke Haircut",
-    "Hot Towel Shave",
-    "Beard Sculpting",
   ],
 };
 
@@ -39,7 +39,7 @@ export default function RootLayout({
       lang="en"
       className={`${cinzel.variable} ${jakarta.variable} font-sans scroll-smooth`}
     >
-      <body className="min-h-screen bg-[#ffffff] text-[#0f0f0f] antialiased selection:bg-[#9e7b3a] selection:text-[#ffffff]">
+      <body className="min-h-screen bg-[#ffffff] text-[#13211B] antialiased selection:bg-[#0E4A35] selection:text-[#F5F1EB]">
         {children}
       </body>
     </html>

@@ -3,64 +3,59 @@
 import { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
 import {
-  Calendar as CalendarIcon,
-  Clock,
-  User,
-  Scissors,
   CheckCircle2,
   Sparkles,
-  Phone,
-  Mail,
   MapPin,
   Download,
+  PhoneCall,
 } from "lucide-react";
 import { SERVICES_DATA, ServiceItem } from "./ServicesSection";
 
-interface BarberSpecialist {
+interface SalonSpecialist {
   id: string;
   name: string;
   title: string;
   experience: string;
 }
 
-const BARBERS: BarberSpecialist[] = [
+const SPECIALISTS: SalonSpecialist[] = [
   {
     id: "any",
-    name: "First Available Artisan",
-    title: "Guild Master Barber",
-    experience: "Immediate Priority",
+    name: "First Available Senior Stylist",
+    title: "H&S Master Team",
+    experience: "Priority Chair Assignment",
   },
   {
-    id: "marcus",
-    name: "Marcus Vance",
-    title: "Master Barber & Atelier Director",
-    experience: "14 Years Exp • Precision Cut",
+    id: "arjun",
+    name: "Arjun Mehra",
+    title: "Creative Hair Director & Fade Master",
+    experience: "12 Years Exp • Precision Cuts & Color",
   },
   {
-    id: "julian",
-    name: "Julian Croft",
-    title: "Senior Skin Fade Specialist",
-    experience: "10 Years Exp • Razor Detailing",
+    id: "riya",
+    name: "Riya Kapoor",
+    title: "Senior Balayage & Keratin Specialist",
+    experience: "10 Years Exp • Hair Botox & Couture Color",
   },
   {
-    id: "dominic",
-    name: "Dominic Ross",
-    title: "Bespoke Beard & Shave Artisan",
-    experience: "8 Years Exp • Hot Towel Master",
+    id: "zaid",
+    name: "Zaid Khan",
+    title: "Master Barber & Beard Architect",
+    experience: "9 Years Exp • Skin Fades & Razor Craft",
   },
 ];
 
 const TIME_SLOTS = [
   { time: "09:30 AM", period: "Morning" },
-  { time: "10:30 AM", period: "Morning" },
-  { time: "11:30 AM", period: "Morning" },
-  { time: "01:00 PM", period: "Afternoon" },
+  { time: "11:00 AM", period: "Morning" },
+  { time: "12:30 PM", period: "Afternoon" },
   { time: "02:00 PM", period: "Afternoon" },
   { time: "03:30 PM", period: "Afternoon" },
-  { time: "04:30 PM", period: "Afternoon" },
-  { time: "05:30 PM", period: "Evening" },
+  { time: "05:00 PM", period: "Evening" },
   { time: "06:30 PM", period: "Evening" },
-  { time: "07:15 PM", period: "Evening" },
+  { time: "07:30 PM", period: "Evening" },
+  { time: "08:30 PM", period: "Evening" },
+  { time: "09:15 PM", period: "Evening" },
 ];
 
 interface BookingSectionProps {
@@ -75,7 +70,7 @@ export default function BookingSection({
   const [activeServiceId, setActiveServiceId] = useState(selectedServiceId);
   const [selectedBarberId, setSelectedBarberId] = useState("any");
   const [selectedDateIndex, setSelectedDateIndex] = useState(1);
-  const [selectedTime, setSelectedTime] = useState("11:30 AM");
+  const [selectedTime, setSelectedTime] = useState("11:00 AM");
 
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
@@ -87,11 +82,18 @@ export default function BookingSection({
   const [confirmedBooking, setConfirmedBooking] = useState<{
     reference: string;
     service: ServiceItem;
-    barber: BarberSpecialist;
+    barber: SalonSpecialist;
     date: string;
     time: string;
     name: string;
   } | null>(null);
+
+  // Sync external selectedServiceId when user clicks "Book Service" in ServicesSection
+  useEffect(() => {
+    if (selectedServiceId) {
+      setActiveServiceId(selectedServiceId);
+    }
+  }, [selectedServiceId]);
 
   // Deterministic initial dates for SSR/prerender stability
   const [dates, setDates] = useState(() => [
@@ -129,7 +131,7 @@ export default function BookingSection({
   const selectedService =
     SERVICES_DATA.find((s) => s.id === activeServiceId) || SERVICES_DATA[0];
   const selectedBarber =
-    BARBERS.find((b) => b.id === selectedBarberId) || BARBERS[0];
+    SPECIALISTS.find((b) => b.id === selectedBarberId) || SPECIALISTS[0];
 
   const validate = () => {
     const errors: { [key: string]: string } = {};
@@ -137,7 +139,7 @@ export default function BookingSection({
     if (!clientEmail.trim() || !clientEmail.includes("@"))
       errors.email = "Please enter a valid email address";
     if (!clientPhone.trim() || clientPhone.length < 7)
-      errors.phone = "Please provide a valid phone number";
+      errors.phone = "Please provide a valid mobile number";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -149,7 +151,7 @@ export default function BookingSection({
     setIsSubmitting(true);
 
     setTimeout(() => {
-      const ref = "GR-" + Math.floor(100000 + Math.random() * 900000);
+      const ref = "HS-" + Math.floor(100000 + Math.random() * 900000);
       setConfirmedBooking({
         reference: ref,
         service: selectedService,
@@ -165,23 +167,23 @@ export default function BookingSection({
           particleCount: 100,
           spread: 70,
           origin: { y: 0.6 },
-          colors: ["#9E7B3A", "#B89552", "#0F0F0F", "#ECE8E1"],
+          colors: ["#0E4A35", "#B48A3C", "#EAD39C", "#0F1F18"],
         });
       } catch {
         // Safe fallback
       }
-    }, 700);
+    }, 600);
   };
 
   const downloadCalendarFile = () => {
     if (!confirmedBooking) return;
     const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//The Gentlemen's Room//Booking//EN
+PRODID:-//H&S Salon//Booking//EN
 BEGIN:VEVENT
-SUMMARY:Appointment: ${confirmedBooking.service.title} - The Gentlemen's Room
-DESCRIPTION:Artisan service with ${confirmedBooking.barber.name}. Reference: ${confirmedBooking.reference}
-LOCATION:The Gentlemen's Room Atelier, 142 Savile Row, Mayfair, London
+SUMMARY:Appointment: ${confirmedBooking.service.title} - H&S Salon
+DESCRIPTION:Luxury salon appointment with ${confirmedBooking.barber.name}. Reference: ${confirmedBooking.reference}
+LOCATION:H&S Salon, Shop 12 & 13, Sagar Darshan Tower, Sector 18, Nerul West, Navi Mumbai 400706
 STATUS:CONFIRMED
 END:VEVENT
 END:VCALENDAR`;
@@ -190,87 +192,87 @@ END:VCALENDAR`;
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `${confirmedBooking.reference}-appointment.ics`);
+    link.setAttribute("download", `${confirmedBooking.reference}-hs-salon.ics`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <section id="booking" className="relative py-24 md:py-32 bg-[#FAF9F7] border-t border-black/5">
+    <section id="booking" className="relative py-24 md:py-32 bg-[#FAF8F4] border-t border-black/5">
       <div className="max-w-7xl mx-auto px-6 md:px-12">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-black/10 bg-white mb-4 shadow-2xs">
-            <Sparkles className="w-3.5 h-3.5 text-[#9E7B3A]" />
-            <span className="text-[10px] tracking-[0.25em] uppercase text-[#9E7B3A] font-bold">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-[#B48A3C]/30 bg-white mb-4 shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 text-[#0E4A35]" />
+            <span className="text-[10px] tracking-[0.25em] uppercase text-[#0E4A35] font-bold">
               RESERVE YOUR APPOINTMENT
             </span>
           </div>
 
           <h2
             style={{ fontFamily: "var(--font-serif)" }}
-            className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-[0.06em] text-[#0F0F0F] uppercase leading-tight mb-4"
+            className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-[0.05em] text-[#0F1F18] uppercase leading-tight mb-4"
           >
-            YOUR CHAIR IS <span className="text-[#9E7B3A]">WAITING.</span>
+            EXPERIENCE THE <span className="text-[#9E7B3A]">H&amp;S STANDARD.</span>
           </h2>
 
           <p
             style={{ fontFamily: "var(--font-serif)" }}
-            className="text-base sm:text-xl text-[#9E7B3A] italic mb-3 font-medium"
+            className="text-base sm:text-xl text-[#0E4A35] italic mb-3 font-medium"
           >
-            “Make time for yourself. Leave looking your best.”
+            “Confidence, redefined. Reserve your private styling station.”
           </p>
 
-          <p className="text-xs sm:text-sm text-[#6E6962] max-w-lg mx-auto leading-relaxed">
-            Select your signature service, preferred barber craftsman, and time.
-            We look forward to welcoming you to the studio.
+          <p className="text-xs sm:text-sm text-[#5F6661] max-w-lg mx-auto leading-relaxed">
+            Select your signature service, preferred specialist, and time slot.
+            Open daily from 9:30 AM to 10:00 PM at Nerul West, Navi Mumbai.
           </p>
         </div>
 
         {/* Confirmation Modal */}
         {confirmedBooking ? (
-          <div className="max-w-2xl mx-auto bg-white border border-[#9E7B3A] p-8 md:p-12 shadow-xl relative animate-fade-in text-center">
-            <div className="w-16 h-16 rounded-full bg-[#FAF9F7] border border-[#9E7B3A] mx-auto flex items-center justify-center mb-6">
-              <CheckCircle2 className="w-8 h-8 text-[#9E7B3A]" />
+          <div className="max-w-2xl mx-auto rounded-2xl bg-white border-2 border-[#B48A3C] p-8 md:p-12 shadow-xl relative animate-fade-in text-center">
+            <div className="w-16 h-16 rounded-full bg-[#FAF8F4] border border-[#0E4A35] mx-auto flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-8 h-8 text-[#0E4A35]" />
             </div>
 
-            <span className="text-[10px] tracking-[0.3em] uppercase text-[#9E7B3A] font-mono font-bold block mb-2">
+            <span className="text-[10px] tracking-[0.3em] uppercase text-[#0E4A35] font-mono font-bold block mb-2">
               APPOINTMENT CONFIRMED • REF #{confirmedBooking.reference}
             </span>
 
             <h3
               style={{ fontFamily: "var(--font-serif)" }}
-              className="text-2xl sm:text-4xl font-bold text-[#0F0F0F] mb-4"
+              className="text-2xl sm:text-4xl font-bold text-[#0F1F18] mb-4"
             >
               We Look Forward To Welcoming You, {confirmedBooking.name}
             </h3>
 
-            <p className="text-xs sm:text-sm text-[#6E6962] max-w-md mx-auto mb-8">
-              A detailed confirmation email and SMS reminder have been dispatched. Your chair and refreshments are reserved.
+            <p className="text-xs sm:text-sm text-[#5F6661] max-w-md mx-auto mb-8">
+              Your styling station at H&amp;S Salon is reserved. A confirmation message has been prepared for your visit.
             </p>
 
-            <div className="bg-[#FAF9F7] border border-black/10 p-6 text-left space-y-3.5 mb-8 text-xs">
+            <div className="rounded-xl bg-[#FAF8F4] border border-black/10 p-6 text-left space-y-3.5 mb-8 text-xs">
               <div className="flex justify-between items-center border-b border-black/5 pb-2.5">
-                <span className="text-[#6E6962] uppercase tracking-wider font-semibold">Service</span>
-                <span className="text-[#0F0F0F] font-bold">{confirmedBooking.service.title}</span>
+                <span className="text-[#5F6661] uppercase tracking-wider font-semibold">Service</span>
+                <span className="text-[#0F1F18] font-bold">{confirmedBooking.service.title}</span>
               </div>
               <div className="flex justify-between items-center border-b border-black/5 pb-2.5">
-                <span className="text-[#6E6962] uppercase tracking-wider font-semibold">Master Barber</span>
-                <span className="text-[#9E7B3A] font-bold">{confirmedBooking.barber.name}</span>
+                <span className="text-[#5F6661] uppercase tracking-wider font-semibold">Specialist</span>
+                <span className="text-[#0E4A35] font-bold">{confirmedBooking.barber.name}</span>
               </div>
               <div className="flex justify-between items-center border-b border-black/5 pb-2.5">
-                <span className="text-[#6E6962] uppercase tracking-wider font-semibold">Date & Time</span>
-                <span className="text-[#0F0F0F] font-mono">
+                <span className="text-[#5F6661] uppercase tracking-wider font-semibold">Date &amp; Time</span>
+                <span className="text-[#0F1F18] font-mono">
                   {confirmedBooking.date} at {confirmedBooking.time}
                 </span>
               </div>
               <div className="flex justify-between items-center border-b border-black/5 pb-2.5">
-                <span className="text-[#6E6962] uppercase tracking-wider font-semibold">Duration</span>
-                <span className="text-[#0F0F0F]">{confirmedBooking.service.duration}</span>
+                <span className="text-[#5F6661] uppercase tracking-wider font-semibold">Duration</span>
+                <span className="text-[#0F1F18]">{confirmedBooking.service.duration}</span>
               </div>
               <div className="flex justify-between items-center pt-1">
-                <span className="text-[#6E6962] uppercase tracking-wider font-bold">Total Due In Studio</span>
+                <span className="text-[#5F6661] uppercase tracking-wider font-bold">Total Payable At Salon</span>
                 <span
                   style={{ fontFamily: "var(--font-serif)" }}
                   className="text-xl font-bold text-[#9E7B3A]"
@@ -283,14 +285,14 @@ END:VCALENDAR`;
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={downloadCalendarFile}
-                className="w-full sm:w-auto px-6 py-3.5 bg-[#0F0F0F] text-white text-xs font-bold tracking-[0.2em] uppercase hover:bg-[#9E7B3A] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-[#0E4A35] text-white text-xs font-bold tracking-[0.2em] uppercase hover:bg-[#9E7B3A] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
                 <Download className="w-4 h-4" />
                 <span>Add To Calendar (.ics)</span>
               </button>
               <button
                 onClick={() => setConfirmedBooking(null)}
-                className="w-full sm:w-auto px-6 py-3.5 bg-transparent border border-black/20 text-[#0F0F0F] hover:bg-[#FAF9F7] text-xs font-semibold tracking-[0.2em] uppercase transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-transparent border border-black/20 text-[#0F1F18] hover:bg-[#FAF8F4] text-xs font-semibold tracking-[0.2em] uppercase transition-colors cursor-pointer"
               >
                 Book Another Appointment
               </button>
@@ -304,16 +306,16 @@ END:VCALENDAR`;
           >
             <div className="lg:col-span-7 space-y-8">
               {/* Step 1: Service */}
-              <div className="bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
+              <div className="rounded-2xl bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
                 <div className="flex items-center gap-3 mb-6">
-                  <span className="w-6 h-6 rounded-full bg-[#0F0F0F] text-white font-bold text-xs flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[#0E4A35] text-white font-bold text-xs flex items-center justify-center">
                     1
                   </span>
                   <h3
                     style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-lg sm:text-xl font-bold text-[#0F0F0F] uppercase tracking-wider"
+                    className="text-lg sm:text-xl font-bold text-[#0F1F18] uppercase tracking-wider"
                   >
-                    Select Grooming Service
+                    Select Signature Service
                   </h3>
                 </div>
 
@@ -326,24 +328,24 @@ END:VCALENDAR`;
                         setActiveServiceId(srv.id);
                         if (onSelectServiceId) onSelectServiceId(srv.id);
                       }}
-                      className={`p-4 text-left border transition-all duration-300 cursor-pointer flex flex-col justify-between ${
+                      className={`p-4 rounded-xl text-left border transition-all duration-300 cursor-pointer flex flex-col justify-between ${
                         activeServiceId === srv.id
-                          ? "bg-[#FAF9F7] border-[#9E7B3A] shadow-xs"
+                          ? "bg-[#FAF8F4] border-[#0E4A35] shadow-xs"
                           : "bg-white border-black/10 hover:border-black/30"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-xs sm:text-sm font-semibold text-[#0F0F0F]">
+                        <span className="text-xs sm:text-sm font-semibold text-[#0F1F18]">
                           {srv.title}
                         </span>
                         <span
                           style={{ fontFamily: "var(--font-serif)" }}
-                          className="text-sm font-bold text-[#9E7B3A]"
+                          className="text-sm font-bold text-[#9E7B3A] flex-shrink-0"
                         >
                           {srv.price}
                         </span>
                       </div>
-                      <span className="text-[11px] text-[#6E6962] font-mono">
+                      <span className="text-[11px] text-[#5F6661] font-mono">
                         {srv.duration}
                       </span>
                     </button>
@@ -351,39 +353,39 @@ END:VCALENDAR`;
                 </div>
               </div>
 
-              {/* Step 2: Barber */}
-              <div className="bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
+              {/* Step 2: Specialist */}
+              <div className="rounded-2xl bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
                 <div className="flex items-center gap-3 mb-6">
-                  <span className="w-6 h-6 rounded-full bg-[#0F0F0F] text-white font-bold text-xs flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[#0E4A35] text-white font-bold text-xs flex items-center justify-center">
                     2
                   </span>
                   <h3
                     style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-lg sm:text-xl font-bold text-[#0F0F0F] uppercase tracking-wider"
+                    className="text-lg sm:text-xl font-bold text-[#0F1F18] uppercase tracking-wider"
                   >
-                    Choose Preferred Barber
+                    Choose Preferred Specialist
                   </h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {BARBERS.map((barber) => (
+                  {SPECIALISTS.map((barber) => (
                     <button
                       key={barber.id}
                       type="button"
                       onClick={() => setSelectedBarberId(barber.id)}
-                      className={`p-4 text-left border transition-all duration-300 cursor-pointer ${
+                      className={`p-4 rounded-xl text-left border transition-all duration-300 cursor-pointer ${
                         selectedBarberId === barber.id
-                          ? "bg-[#FAF9F7] border-[#9E7B3A] shadow-xs"
+                          ? "bg-[#FAF8F4] border-[#0E4A35] shadow-xs"
                           : "bg-white border-black/10 hover:border-black/30"
                       }`}
                     >
-                      <div className="text-xs sm:text-sm font-bold text-[#0F0F0F] mb-1">
+                      <div className="text-xs sm:text-sm font-bold text-[#0F1F18] mb-1">
                         {barber.name}
                       </div>
-                      <div className="text-[11px] text-[#9E7B3A] font-semibold mb-0.5">
+                      <div className="text-[11px] text-[#0E4A35] font-semibold mb-0.5">
                         {barber.title}
                       </div>
-                      <div className="text-[10px] text-[#6E6962] font-mono">
+                      <div className="text-[10px] text-[#5F6661] font-mono">
                         {barber.experience}
                       </div>
                     </button>
@@ -392,21 +394,21 @@ END:VCALENDAR`;
               </div>
 
               {/* Step 3: Date & Time */}
-              <div className="bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
+              <div className="rounded-2xl bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
                 <div className="flex items-center gap-3 mb-6">
-                  <span className="w-6 h-6 rounded-full bg-[#0F0F0F] text-white font-bold text-xs flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[#0E4A35] text-white font-bold text-xs flex items-center justify-center">
                     3
                   </span>
                   <h3
                     style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-lg sm:text-xl font-bold text-[#0F0F0F] uppercase tracking-wider"
+                    className="text-lg sm:text-xl font-bold text-[#0F1F18] uppercase tracking-wider"
                   >
-                    Select Date & Time
+                    Select Date &amp; Time
                   </h3>
                 </div>
 
                 <div className="mb-6">
-                  <span className="text-[10px] tracking-[0.2em] uppercase text-[#6E6962] block mb-3 font-mono font-semibold">
+                  <span className="text-[10px] tracking-[0.2em] uppercase text-[#5F6661] block mb-3 font-mono font-semibold">
                     Available Dates (Next 10 Days)
                   </span>
                   <div className="flex gap-2 overflow-x-auto pb-2">
@@ -415,10 +417,10 @@ END:VCALENDAR`;
                         key={idx}
                         type="button"
                         onClick={() => setSelectedDateIndex(idx)}
-                        className={`flex flex-col items-center justify-center min-w-[72px] p-3 border transition-all duration-200 cursor-pointer ${
+                        className={`flex flex-col items-center justify-center min-w-[72px] p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
                           selectedDateIndex === idx
-                            ? "bg-[#0F0F0F] text-white border-[#0F0F0F] font-bold shadow-xs"
-                            : "bg-[#FAF9F7] text-[#4A4640] border-black/10 hover:border-black/30"
+                            ? "bg-[#0E4A35] text-white border-[#0E4A35] font-bold shadow-xs"
+                            : "bg-[#FAF8F4] text-[#4A4640] border-black/10 hover:border-black/30"
                         }`}
                       >
                         <span className="text-[10px] uppercase font-mono tracking-wider">
@@ -434,8 +436,8 @@ END:VCALENDAR`;
                 </div>
 
                 <div>
-                  <span className="text-[10px] tracking-[0.2em] uppercase text-[#6E6962] block mb-3 font-mono font-semibold">
-                    Available Chair Time Slots
+                  <span className="text-[10px] tracking-[0.2em] uppercase text-[#5F6661] block mb-3 font-mono font-semibold">
+                    Available Time Slots (9:30 AM – 10:00 PM)
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {TIME_SLOTS.map((slot) => (
@@ -443,10 +445,10 @@ END:VCALENDAR`;
                         key={slot.time}
                         type="button"
                         onClick={() => setSelectedTime(slot.time)}
-                        className={`py-2 px-3 text-center text-xs border font-mono transition-all duration-200 cursor-pointer ${
+                        className={`py-2.5 px-3 rounded-lg text-center text-xs border font-mono transition-all duration-200 cursor-pointer ${
                           selectedTime === slot.time
                             ? "bg-[#9E7B3A] text-white border-[#9E7B3A] font-bold"
-                            : "bg-[#FAF9F7] text-[#0F0F0F] border-black/10 hover:border-black/30"
+                            : "bg-[#FAF8F4] text-[#0F1F18] border-black/10 hover:border-black/30"
                         }`}
                       >
                         {slot.time}
@@ -457,30 +459,30 @@ END:VCALENDAR`;
               </div>
 
               {/* Step 4: Client Info */}
-              <div className="bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
+              <div className="rounded-2xl bg-white border border-black/10 p-6 md:p-8 shadow-2xs">
                 <div className="flex items-center gap-3 mb-6">
-                  <span className="w-6 h-6 rounded-full bg-[#0F0F0F] text-white font-bold text-xs flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-[#0E4A35] text-white font-bold text-xs flex items-center justify-center">
                     4
                   </span>
                   <h3
                     style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-lg sm:text-xl font-bold text-[#0F0F0F] uppercase tracking-wider"
+                    className="text-lg sm:text-xl font-bold text-[#0F1F18] uppercase tracking-wider"
                   >
-                    Your Details
+                    Your Guest Details
                   </h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                   <div>
-                    <label className="text-[10px] tracking-[0.15em] uppercase text-[#6E6962] font-semibold block mb-1">
+                    <label className="text-[10px] tracking-[0.15em] uppercase text-[#5F6661] font-semibold block mb-1">
                       Full Name *
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Alexander Hayes"
+                      placeholder="e.g. Rohan Sharma"
                       value={clientName}
                       onChange={(e) => setClientName(e.target.value)}
-                      className={`w-full bg-[#FAF9F7] border px-4 py-3 text-xs text-[#0F0F0F] focus:outline-none focus:border-[#9E7B3A] ${
+                      className={`w-full rounded-lg bg-[#FAF8F4] border px-4 py-3 text-xs text-[#0F1F18] focus:outline-none focus:border-[#0E4A35] ${
                         formErrors.name ? "border-red-500" : "border-black/10"
                       }`}
                     />
@@ -492,15 +494,15 @@ END:VCALENDAR`;
                   </div>
 
                   <div>
-                    <label className="text-[10px] tracking-[0.15em] uppercase text-[#6E6962] font-semibold block mb-1">
-                      Phone Number *
+                    <label className="text-[10px] tracking-[0.15em] uppercase text-[#5F6661] font-semibold block mb-1">
+                      Mobile / WhatsApp Number *
                     </label>
                     <input
                       type="tel"
-                      placeholder="+44 7911 123456"
+                      placeholder="+91 98765 43210"
                       value={clientPhone}
                       onChange={(e) => setClientPhone(e.target.value)}
-                      className={`w-full bg-[#FAF9F7] border px-4 py-3 text-xs text-[#0F0F0F] focus:outline-none focus:border-[#9E7B3A] ${
+                      className={`w-full rounded-lg bg-[#FAF8F4] border px-4 py-3 text-xs text-[#0F1F18] focus:outline-none focus:border-[#0E4A35] ${
                         formErrors.phone ? "border-red-500" : "border-black/10"
                       }`}
                     />
@@ -513,15 +515,15 @@ END:VCALENDAR`;
                 </div>
 
                 <div className="mb-4">
-                  <label className="text-[10px] tracking-[0.15em] uppercase text-[#6E6962] font-semibold block mb-1">
+                  <label className="text-[10px] tracking-[0.15em] uppercase text-[#5F6661] font-semibold block mb-1">
                     Email Address *
                   </label>
                   <input
                     type="email"
-                    placeholder="alexander@example.com"
+                    placeholder="rohan@example.com"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
-                    className={`w-full bg-[#FAF9F7] border px-4 py-3 text-xs text-[#0F0F0F] focus:outline-none focus:border-[#9E7B3A] ${
+                    className={`w-full rounded-lg bg-[#FAF8F4] border px-4 py-3 text-xs text-[#0F1F18] focus:outline-none focus:border-[#0E4A35] ${
                       formErrors.email ? "border-red-500" : "border-black/10"
                     }`}
                   />
@@ -533,15 +535,15 @@ END:VCALENDAR`;
                 </div>
 
                 <div>
-                  <label className="text-[10px] tracking-[0.15em] uppercase text-[#6E6962] font-semibold block mb-1">
-                    Special Notes or Preferred Beverage
+                  <label className="text-[10px] tracking-[0.15em] uppercase text-[#5F6661] font-semibold block mb-1">
+                    Styling Notes or Preferences
                   </label>
                   <textarea
                     rows={3}
-                    placeholder="e.g. Skin sensitivity, espresso preference, or wedding event prep..."
+                    placeholder="e.g. Skin fade preference, hair color shade, bridal consultation, or coffee preference..."
                     value={specialNotes}
                     onChange={(e) => setSpecialNotes(e.target.value)}
-                    className="w-full bg-[#FAF9F7] border border-black/10 px-4 py-3 text-xs text-[#0F0F0F] focus:outline-none focus:border-[#9E7B3A]"
+                    className="w-full rounded-lg bg-[#FAF8F4] border border-black/10 px-4 py-3 text-xs text-[#0F1F18] focus:outline-none focus:border-[#0E4A35]"
                   />
                 </div>
               </div>
@@ -549,17 +551,17 @@ END:VCALENDAR`;
 
             {/* Summary Sticky Panel */}
             <div className="lg:col-span-5 lg:sticky lg:top-28">
-              <div className="bg-white border border-black/10 p-6 md:p-8 shadow-md relative">
+              <div className="rounded-2xl bg-white border-2 border-[#B48A3C]/35 p-6 md:p-8 shadow-md relative">
                 <div className="flex items-center justify-between border-b border-black/10 pb-4 mb-6">
                   <div>
-                    <span className="text-[10px] tracking-[0.25em] uppercase text-[#9E7B3A] font-mono font-bold block">
+                    <span className="text-[10px] tracking-[0.25em] uppercase text-[#0E4A35] font-mono font-bold block">
                       APPOINTMENT SUMMARY
                     </span>
                     <h4
                       style={{ fontFamily: "var(--font-serif)" }}
-                      className="text-xl font-bold text-[#0F0F0F]"
+                      className="text-xl font-bold text-[#0F1F18]"
                     >
-                      The Gentlemen&apos;s Room
+                      H&amp;S Salon • Nerul West
                     </h4>
                   </div>
                   <Sparkles className="w-5 h-5 text-[#9E7B3A]" />
@@ -567,43 +569,43 @@ END:VCALENDAR`;
 
                 <div className="space-y-4 mb-8 text-xs">
                   <div className="flex justify-between items-center">
-                    <span className="text-[#6E6962]">Selected Service:</span>
-                    <span className="text-[#0F0F0F] font-bold text-right">
+                    <span className="text-[#5F6661]">Selected Service:</span>
+                    <span className="text-[#0F1F18] font-bold text-right">
                       {selectedService.title}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-[#6E6962]">Artisan Barber:</span>
-                    <span className="text-[#9E7B3A] font-bold text-right">
+                    <span className="text-[#5F6661]">Specialist:</span>
+                    <span className="text-[#0E4A35] font-bold text-right">
                       {selectedBarber.name}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-[#6E6962]">Date:</span>
-                    <span className="text-[#0F0F0F] text-right font-mono">
+                    <span className="text-[#5F6661]">Date:</span>
+                    <span className="text-[#0F1F18] text-right font-mono">
                       {dates[selectedDateIndex].full}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-[#6E6962]">Time:</span>
-                    <span className="text-[#0F0F0F] text-right font-mono">
+                    <span className="text-[#5F6661]">Time:</span>
+                    <span className="text-[#0F1F18] text-right font-mono">
                       {selectedTime}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-[#6E6962]">Session Duration:</span>
-                    <span className="text-[#0F0F0F] text-right font-mono">
+                    <span className="text-[#5F6661]">Session Duration:</span>
+                    <span className="text-[#0F1F18] text-right font-mono">
                       {selectedService.duration}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center pt-4 border-t border-black/10">
-                    <span className="text-sm font-bold uppercase tracking-wider text-[#0F0F0F]">
-                      Total Due In Studio:
+                    <span className="text-sm font-bold uppercase tracking-wider text-[#0F1F18]">
+                      Estimated Total:
                     </span>
                     <span
                       style={{ fontFamily: "var(--font-serif)" }}
@@ -614,35 +616,35 @@ END:VCALENDAR`;
                   </div>
                 </div>
 
-                <div className="bg-[#FAF9F7] p-4 border border-black/5 space-y-2 mb-8 text-[11px] text-[#6E6962]">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-[#9E7B3A] flex-shrink-0" />
-                    <span>142 Savile Row, Mayfair, London W1S 3PW</span>
+                <div className="rounded-xl bg-[#FAF8F4] p-4 border border-black/5 space-y-2 mb-8 text-[11px] text-[#5F6661]">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0 mt-0.5" />
+                    <span>Shop 12 &amp; 13, Sagar Darshan Tower, Sector 18, Nerul West, Navi Mumbai</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9E7B3A] flex-shrink-0" />
-                    <span>No advance deposit required. Pay in chair after service.</span>
+                    <PhoneCall className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0" />
+                    <span>Concierge Direct: +91 91677 79514 / +91 91677 79515</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9E7B3A] flex-shrink-0" />
-                    <span>Complimentary single-malt whisky or espresso included.</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0" />
+                    <span>No advance deposit required. Pay at salon after service.</span>
                   </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 bg-[#0F0F0F] text-white font-bold text-xs tracking-[0.25em] uppercase hover:bg-[#9E7B3A] transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-full bg-[#0E4A35] text-white font-bold text-xs tracking-[0.25em] uppercase hover:bg-[#9E7B3A] transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
-                    <span>Securing Your Chair...</span>
+                    <span>Securing Your Station...</span>
                   ) : (
-                    <span>Request Appointment</span>
+                    <span>Confirm Appointment</span>
                   )}
                 </button>
 
-                <p className="text-[10px] text-center text-[#6E6962] mt-3">
-                  Instant email confirmation with automated calendar invite
+                <p className="text-[10px] text-center text-[#5F6661] mt-3">
+                  Instant confirmation with downloadable calendar invite
                 </p>
               </div>
             </div>
