@@ -1,26 +1,70 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-black: #0f0f0f;
+  --color-brand-dark: #1f1d1a;
+  --color-brand-surface: #f9f8f6;
+  --color-brand-surface-card: #ffffff;
+  --color-brand-gold: #9e7b3a;
+  --color-brand-gold-light: #b89552;
+  --color-brand-white: #ffffff;
+  --color-brand-muted: #6e6962;
+  --color-brand-border: #e6e1d8;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9f8f6;
+  --bg-surface: #ffffff;
+  --text-primary: #0f0f0f;
+  --text-muted: #6e6962;
+  --accent-gold: #9e7b3a;
+  --accent-gold-light: #b89552;
+  --border-light: #e6e1d8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
+  background-color: #ffffff;
+  color: #0f0f0f;
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #ffffff;
+  color: #0f0f0f;
+  overflow-x: hidden;
+  selection-background-color: #9e7b3a;
+  selection-color: #ffffff;
+}
+
+::selection {
+  background-color: #9e7b3a;
+  color: #ffffff;
+}
+
+/* Custom luxury scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f7f5f2;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4cdc3;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9e7b3a;
+}
+
+/* Noise / Dot texture overlay */
+.bg-subtle-pattern {
+  background-image: radial-gradient(#dcd5ca 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Subtle gold glow */
+.gold-glow {
+  text-shadow: 0 0 25px rgba(158, 123, 58, 0.25);
 }

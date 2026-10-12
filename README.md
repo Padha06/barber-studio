@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Gentlemen's Room — Luxury Barber Studio & Grooming Atelier
 
-## Getting Started
+An ultra-premium, cinematic scroll-driven website for a modern luxury barbershop, inspired by Apple product launches and high-fashion editorial campaigns.
 
-First, run the development server:
+## ✨ Highlights
+
+- **Top Landing Scrollytelling Experience**: 300-frame Full HD interactive sequence scrubbing on scroll using high-performance HTML5 Canvas.
+- **Dynamic Scene Captions**: Floating, borderless side typography that updates seamlessly across the 6 narrative scenes (Arrival, Sanctuary, Art of the Cut, The Ritual, The Master Arsenal, The Signature Reveal).
+- **Pure Scroll-Driven Reel**: Smooth, natural scroll scrubbing with no distracting slider bars or scrubbers.
+- **Procedural Salon Ambience**: Interactive Web Audio API sound synthesizer with warm low-frequency room tone, subtle clipper harmonics, and acoustic scissor snips (starts muted).
+- **Curated Editorial Services**: Interactive service catalog with instant booking triggers.
+- **Atelier Sanctuary Gallery**: Staggered masonry photo gallery showcasing craftsmanship and hygiene standards.
+- **Apothecary Collection**: Curated grooming products with fragrance note inspection modal and in-studio reservation.
+- **High-Conversion Booking System**: 4-step reservation wizard with barber selection, dynamic date/time picker, form validation, celebratory confetti, and `.ics` calendar file export.
+
+## 🛠️ Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4
+- **Animation**: HTML5 Canvas, Framer Motion
+- **Icons**: Lucide React
+- **Celebration**: Canvas-Confetti
+- **Typography**: Cinzel (Luxury Roman Serif) & Plus Jakarta Sans (Modern Editorial Sans)
+
+## 🚀 Getting Started
 
 ```bash
+# Install dependencies
+npm install
+
+# Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000) with your browser to experience the site.
