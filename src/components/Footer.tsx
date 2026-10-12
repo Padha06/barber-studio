@@ -9,7 +9,7 @@ export default function Footer() {
   };
 
   return (
-    <footer className="relative bg-[#ffffff] text-[#4A4640] border-t border-black/10 pt-20 pb-12 overflow-hidden">
+    <footer className="relative bg-[#ffffff] text-[#4A4640] border-t border-black/10 pt-20 pb-28 md:pb-16 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 md:px-12">
         {/* Master Brand Statement */}
         <div className="border-b border-black/10 pb-16 mb-16 text-center">
