@@ -33,9 +33,18 @@ html {
 body {
   background-color: #ffffff;
   color: #0f0f0f;
-  overflow-x: hidden;
+  /* clip (not hidden) — hidden turns <body> into a scroll container, which
+     breaks position: sticky in the scrollytelling hero on mobile browsers. */
+  overflow-x: clip;
   selection-background-color: #9e7b3a;
   selection-color: #ffffff;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 ::selection {

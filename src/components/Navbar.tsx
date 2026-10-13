@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -19,30 +19,68 @@ interface NavbarProps {
 export default function Navbar({ onOpenBooking }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("hero");
+  const scrolledRef = useRef(false);
+  const activeSectionRef = useRef("hero");
 
-  // Track scroll depth and active section for navigation highlight
+  // Track scroll depth and active section for navigation highlight.
+  // Section offsets are measured once (and on resize) instead of reading
+  // el.offsetTop on every scroll event — those reads force a synchronous
+  // layout flush and are the main cause of janky mobile scrolling.
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+    const sections = ["hero", "services", "studio", "grooming", "booking"];
+    let offsets: { id: string; top: number }[] = [];
 
-      const sections = ["hero", "services", "studio", "grooming", "booking"];
-      const scrollPos = window.scrollY + 200;
+    const measure = () => {
+      offsets = sections
+        .map((id) => {
+          const el = document.getElementById(id);
+          return el ? { id, top: el.offsetTop } : null;
+        })
+        .filter((v): v is { id: string; top: number } => v !== null);
+    };
 
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const el = document.getElementById(sections[i]);
-        if (el) {
-          const top = el.offsetTop;
-          if (scrollPos >= top) {
-            setActiveSection(sections[i]);
-            break;
-          }
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const y = window.scrollY;
+
+      const nextScrolled = y > 20;
+      if (nextScrolled !== scrolledRef.current) {
+        scrolledRef.current = nextScrolled;
+        setScrolled(nextScrolled);
+      }
+
+      const scrollPos = y + 200;
+      let next = "hero";
+      for (let i = offsets.length - 1; i >= 0; i--) {
+        if (scrollPos >= offsets[i].top) {
+          next = offsets[i].id;
+          break;
         }
+      }
+      if (next !== activeSectionRef.current) {
+        activeSectionRef.current = next;
+        setActiveSection(next);
       }
     };
 
+    const handleScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(update);
+    };
+
+    measure();
+    update();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("resize", measure, { passive: true });
+    const settle = window.setTimeout(measure, 600);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", measure);
+      window.clearTimeout(settle);
+    };
   }, []);
 
   const navLinks = [
@@ -163,7 +201,7 @@ export default function Navbar({ onOpenBooking }: NavbarProps) {
         <a
           href="#hero"
           onClick={(e) => scrollTo(e, "hero")}
-          className="pointer-events-auto flex items-center gap-2 bg-black/45 backdrop-blur-md border border-white/20 pr-3.5 pl-1.5 py-1 rounded-full shadow-md"
+          className="pointer-events-auto flex items-center gap-2 bg-black/60 border border-white/20 pr-3.5 pl-1.5 py-1 rounded-full shadow-md"
         >
           <div className="relative w-7 h-7 rounded-full overflow-hidden bg-white flex-shrink-0">
             <Image
@@ -193,7 +231,7 @@ export default function Navbar({ onOpenBooking }: NavbarProps) {
       {/* ========================================================= */}
       <nav
         aria-label="Mobile Navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-2xl border-t border-black/10 shadow-[0_-8px_30px_rgba(0,0,0,0.1)] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-black/10 shadow-[0_-8px_30px_rgba(0,0,0,0.1)] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
       >
         <div className="max-w-md mx-auto grid grid-cols-5 items-center justify-around gap-1">
           {navLinks.map((item) => {

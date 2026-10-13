@@ -12,6 +12,16 @@ const TOTAL_FRAMES = 290;
 const MOBILE_W = 504;
 const MOBILE_H = 896;
 
+// ── Mobile memory budget ───────────────────────────────────────────────────
+// A decoded 504×896 RGBA frame is ~1.8 MB. Holding all 290 pinned (ImageBitmap)
+// means ~520 MB resident → memory pressure / GC thrash / dropped frames on any
+// phone. We instead keep the compressed frames (~5 MB total) and only decode a
+// sliding window around the current scroll position, evicting the rest.
+const MOBILE_WINDOW = 30; // decode ±N frames around current position
+const MOBILE_MAX_DECODED = 78; // hard ceiling on resident decoded frames (~140 MB)
+const MOBILE_EVICT_RADIUS = 34; // never evict frames within this distance
+const MOBILE_BLOB_CONCURRENCY = 8;
+
 interface CaptionScene {
   id: number;
   tag: string;
@@ -99,11 +109,18 @@ export default function TopLandingScrollytelling({
   const [activeScene, setActiveScene] = useState<CaptionScene>(SCENES[0]);
   const [showScrollHint, setShowScrollHint] = useState(true);
 
-  // Stores decoded frames: ImageBitmap on mobile (GPU-pinned, never evicted), HTMLImageElement on desktop
+  // Decoded frames ready to draw (ImageBitmap on mobile, HTMLImageElement on desktop)
   const framesRef = useRef<Map<number, ImageBitmap | HTMLImageElement>>(
     new Map()
   );
   const loadedSetRef = useRef<Set<number>>(new Set());
+
+  // Mobile-only: compressed blobs + bounded decode window bookkeeping
+  const blobCacheRef = useRef<Map<number, Blob>>(new Map());
+  const blobPromiseRef = useRef<Map<number, Promise<Blob | null>>>(new Map());
+  const decodingRef = useRef<Set<number>>(new Set());
+  const decodedUsageRef = useRef<Map<number, number>>(new Map());
+  const usageTickRef = useRef(0);
 
   // Scroll state — single source of truth, read directly from DOM
   const lastDrawnFrameRef = useRef<number>(-1);
@@ -112,6 +129,9 @@ export default function TopLandingScrollytelling({
   const isMobileRef = useRef<boolean>(false);
   const lastWidthRef = useRef<number>(0);
   const totalScrollableRef = useRef<number>(5000);
+  const scrollYRef = useRef<number>(0);
+  const currentFrameRef = useRef<number>(1);
+  const visibleRef = useRef<boolean>(true);
 
   // Desktop-only spring physics state
   const targetProgressRef = useRef(0);
@@ -125,12 +145,118 @@ export default function TopLandingScrollytelling({
     h: 1080,
   });
 
-  const getFrameUrl = (frameIdx: number, isMobile: boolean) => {
+  const getFrameUrl = useCallback((frameIdx: number, isMobile: boolean) => {
     const padded = String(frameIdx).padStart(3, "0");
     return isMobile
       ? `/frames-mobile/frame-${padded}.webp`
       : `/frames/frame-${padded}.webp`;
-  };
+  }, []);
+
+  // ─── Mobile decode helpers ────────────────────────────────────────────────
+  const getBlob = useCallback(
+    (idx: number): Promise<Blob | null> => {
+      const cached = blobCacheRef.current.get(idx);
+      if (cached) return Promise.resolve(cached);
+      const pending = blobPromiseRef.current.get(idx);
+      if (pending) return pending;
+
+      const p = fetch(getFrameUrl(idx, true))
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("http"))))
+        .then((blob) => {
+          blobCacheRef.current.set(idx, blob);
+          return blob;
+        })
+        .catch(() => null)
+        .finally(() => {
+          blobPromiseRef.current.delete(idx);
+        });
+
+      blobPromiseRef.current.set(idx, p);
+      return p;
+    },
+    [getFrameUrl]
+  );
+
+  const touchFrame = useCallback((idx: number) => {
+    decodedUsageRef.current.set(idx, ++usageTickRef.current);
+  }, []);
+
+  const evictIfNeeded = useCallback((center: number) => {
+    const frames = framesRef.current;
+    if (frames.size <= MOBILE_MAX_DECODED) return;
+
+    const evictable: number[] = [];
+    for (const idx of frames.keys()) {
+      if (Math.abs(idx - center) > MOBILE_EVICT_RADIUS) evictable.push(idx);
+    }
+    evictable.sort(
+      (a, b) =>
+        (decodedUsageRef.current.get(a) ?? 0) -
+        (decodedUsageRef.current.get(b) ?? 0)
+    );
+
+    let need = frames.size - MOBILE_MAX_DECODED;
+    for (const idx of evictable) {
+      if (need <= 0) break;
+      const value = frames.get(idx);
+      if (value instanceof ImageBitmap) value.close();
+      frames.delete(idx);
+      loadedSetRef.current.delete(idx);
+      decodedUsageRef.current.delete(idx);
+      need--;
+    }
+  }, []);
+
+  const decodeFrame = useCallback(
+    (idx: number): Promise<void> => {
+      if (idx < 1 || idx > TOTAL_FRAMES) return Promise.resolve();
+      if (framesRef.current.has(idx) || decodingRef.current.has(idx)) {
+        touchFrame(idx);
+        return Promise.resolve();
+      }
+      decodingRef.current.add(idx);
+
+      const store = (value: ImageBitmap | HTMLImageElement) => {
+        if (framesRef.current.has(idx)) {
+          if (value instanceof ImageBitmap) value.close();
+          return;
+        }
+        framesRef.current.set(idx, value);
+        loadedSetRef.current.add(idx);
+        touchFrame(idx);
+        evictIfNeeded(currentFrameRef.current);
+      };
+
+      return getBlob(idx)
+        .then((blob) => {
+          if (!blob) return;
+          if (typeof createImageBitmap === "function") {
+            return createImageBitmap(blob).then(store);
+          }
+          // Fallback for engines without createImageBitmap
+          return new Promise<void>((resolve) => {
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.decoding = "async";
+            img.onload = () => {
+              URL.revokeObjectURL(url);
+              store(img);
+              resolve();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.src = url;
+          });
+        })
+        .catch(() => {})
+        .finally(() => {
+          decodingRef.current.delete(idx);
+        }) as Promise<void>;
+    },
+    [getBlob, touchFrame, evictIfNeeded]
+  );
 
   // ─── drawFrame ────────────────────────────────────────────────────────────
   // Mobile:  1:1 unscaled GPU blit onto fixed 504×896 buffer (<0.02ms).
@@ -138,16 +264,21 @@ export default function TopLandingScrollytelling({
   // Desktop: exact cover-scaled draw into the DPR-aware canvas buffer.
   const drawFrame = useCallback((frameIdx: number, force = false) => {
     const isMob = isMobileRef.current;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    // On mobile find the closest loaded frame to avoid blank frames
+    // If the exact frame isn't decoded yet, fall back to the closest resident
+    // frame so the canvas never goes blank while the window top-up catches up.
     let targetIdx = frameIdx;
-    if (isMob && !loadedSetRef.current.has(frameIdx)) {
-      // Walk outward to find nearest loaded frame
+    if (!framesRef.current.has(targetIdx)) {
       let best = -1;
       let bestDist = Infinity;
-      for (const idx of loadedSetRef.current) {
+      for (const idx of framesRef.current.keys()) {
         const d = Math.abs(idx - frameIdx);
-        if (d < bestDist) { bestDist = d; best = idx; }
+        if (d < bestDist) {
+          bestDist = d;
+          best = idx;
+        }
       }
       if (best === -1) return;
       targetIdx = best;
@@ -155,8 +286,6 @@ export default function TopLandingScrollytelling({
 
     if (!force && lastDrawnFrameRef.current === targetIdx) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     if (!ctxRef.current) {
       ctxRef.current = canvas.getContext("2d", {
         alpha: false,
@@ -253,7 +382,10 @@ export default function TopLandingScrollytelling({
       }
 
       const p = isMobileRef.current
-        ? Math.max(0, Math.min(1, window.scrollY / totalScrollableRef.current))
+        ? Math.max(
+            0,
+            Math.min(1, scrollYRef.current / totalScrollableRef.current)
+          )
         : currentProgressRef.current;
       const currentFrame = Math.max(
         1,
@@ -266,10 +398,42 @@ export default function TopLandingScrollytelling({
 
   // ─── Frame preload pipeline ───────────────────────────────────────────────
   useEffect(() => {
-    let isCancelled = false;
-    const loadingSet = new Set<number>();
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
+    let isCancelled = false;
+
+    if (isMobile) {
+      // Mobile: decode the very first frame for instant paint, then stream the
+      // compressed frames into the blob cache in the background. Decoding is
+      // driven by the bounded window manager (see below).
+      decodeFrame(1).then(() => {
+        if (isCancelled) return;
+        handleResize(true);
+        drawFrame(1, true);
+      });
+
+      const prefetchBlobs = async () => {
+        let cursor = 1;
+        const worker = async () => {
+          while (!isCancelled) {
+            const idx = cursor++;
+            if (idx > TOTAL_FRAMES) break;
+            await getBlob(idx);
+          }
+        };
+        await Promise.all(
+          Array.from({ length: MOBILE_BLOB_CONCURRENCY }, () => worker())
+        );
+      };
+      void prefetchBlobs();
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    // ── Desktop strategy (unchanged): stride 4 → 2 → 1 as HTMLImageElement ──
+    const loadingSet = new Set<number>();
 
     const loadAndDecodeFrame = async (idx: number): Promise<void> => {
       if (
@@ -282,30 +446,7 @@ export default function TopLandingScrollytelling({
         return;
       }
       loadingSet.add(idx);
-      const url = getFrameUrl(idx, isMobile);
-
-      try {
-        if (isMobile && typeof window.createImageBitmap === "function") {
-          const res = await fetch(url);
-          const blob = await res.blob();
-          if (isCancelled) return;
-          const bitmap = await createImageBitmap(blob);
-          if (isCancelled) {
-            bitmap.close();
-            return;
-          }
-          framesRef.current.set(idx, bitmap);
-          loadedSetRef.current.add(idx);
-          loadingSet.delete(idx);
-          if (idx === 1) {
-            handleResize(true);
-            drawFrame(1, true);
-          }
-          return;
-        }
-      } catch {
-        // Fall through to HTMLImageElement path
-      }
+      const url = getFrameUrl(idx, false);
 
       await new Promise<void>((resolve) => {
         const img = new Image();
@@ -314,7 +455,10 @@ export default function TopLandingScrollytelling({
 
         const finalize = () => {
           loadingSet.delete(idx);
-          if (isCancelled) { resolve(); return; }
+          if (isCancelled) {
+            resolve();
+            return;
+          }
           framesRef.current.set(idx, img);
           loadedSetRef.current.add(idx);
           if (idx === 1) {
@@ -325,10 +469,12 @@ export default function TopLandingScrollytelling({
         };
 
         if (img.decode) {
-          img.decode().then(finalize).catch(() => {
-            img.onload = finalize;
-            img.onerror = () => resolve();
-          });
+          img.decode()
+            .then(finalize)
+            .catch(() => {
+              img.onload = finalize;
+              img.onerror = () => resolve();
+            });
         } else {
           img.onload = finalize;
           img.onerror = () => resolve();
@@ -338,50 +484,37 @@ export default function TopLandingScrollytelling({
     };
 
     const runPreloadPipeline = async () => {
-      // Frame 1 first — renders immediately
       await loadAndDecodeFrame(1);
 
       const queuedSet = new Set<number>([1]);
       const queue: number[] = [];
-
-      if (isMobile) {
-        // ── Mobile strategy ──────────────────────────────────────────────
-        // Stage A: Every 10th frame across the full timeline (29 frames, ~0.5 MB)
-        //          → full-range scrubbing works immediately after ~2s
-        for (let i = 1; i <= TOTAL_FRAMES; i += 10) {
-          if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
-        }
-        // Stage B: Every 4th frame (fills gaps to ±4 frame accuracy)
-        for (let i = 1; i <= TOTAL_FRAMES; i += 4) {
-          if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
-        }
-        // Stage C: All remaining frames (full 290-frame fidelity)
-        for (let i = 1; i <= TOTAL_FRAMES; i++) {
-          if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
-        }
-      } else {
-        // Desktop: stride 4 → 2 → 1
-        for (const stride of [4, 2, 1]) {
-          for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
-            if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
+      for (const stride of [4, 2, 1]) {
+        for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
+          if (!queuedSet.has(i)) {
+            queuedSet.add(i);
+            queue.push(i);
           }
         }
       }
 
       let cursor = 0;
 
-      // Priority: load frames immediately ahead of current scroll first
       const getNextFrameToLoad = (): number | null => {
         const scrollProgress = Math.max(
           0,
-          Math.min(1, window.scrollY / Math.max(1, totalScrollableRef.current))
+          Math.min(
+            1,
+            window.scrollY / Math.max(1, totalScrollableRef.current)
+          )
         );
         const curr = Math.max(
           1,
-          Math.min(TOTAL_FRAMES, Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1)
+          Math.min(
+            TOTAL_FRAMES,
+            Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1
+          )
         );
 
-        // Lookahead: next 40 frames ahead of current position
         for (let offset = 0; offset <= 40; offset++) {
           const t = curr + offset;
           if (
@@ -394,19 +527,19 @@ export default function TopLandingScrollytelling({
           }
         }
 
-        // Fallback: sequential from queue
         while (cursor < queue.length) {
           const candidate = queue[cursor++];
-          if (!loadedSetRef.current.has(candidate) && !loadingSet.has(candidate)) {
+          if (
+            !loadedSetRef.current.has(candidate) &&
+            !loadingSet.has(candidate)
+          ) {
             return candidate;
           }
         }
         return null;
       };
 
-      // On mobile: 6 concurrent fetches. On desktop: 8.
-      const CONCURRENCY = isMobile ? 6 : 8;
-
+      const CONCURRENCY = 8;
       const worker = async () => {
         while (!isCancelled) {
           const nextIdx = getNextFrameToLoad();
@@ -415,24 +548,61 @@ export default function TopLandingScrollytelling({
         }
       };
 
-      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+      await Promise.all(
+        Array.from({ length: CONCURRENCY }, () => worker())
+      );
 
       if (!isCancelled) {
         const scrollProgress = Math.max(
           0,
-          Math.min(1, window.scrollY / Math.max(1, totalScrollableRef.current))
+          Math.min(
+            1,
+            window.scrollY / Math.max(1, totalScrollableRef.current)
+          )
         );
         const exactFrame = Math.max(
           1,
-          Math.min(TOTAL_FRAMES, Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1)
+          Math.min(
+            TOTAL_FRAMES,
+            Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1
+          )
         );
         drawFrame(exactFrame, true);
       }
     };
 
     runPreloadPipeline();
-    return () => { isCancelled = true; };
-  }, [handleResize, drawFrame]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [decodeFrame, getBlob, handleResize, drawFrame, getFrameUrl]);
+
+  // ─── Mobile sliding-window decoder ────────────────────────────────────────
+  // Keeps a bounded, sharp window around the current frame and evicts the rest.
+  useEffect(() => {
+    const topUp = () => {
+      if (!isMobileRef.current || !visibleRef.current) return;
+      const center = currentFrameRef.current;
+      const lo = Math.max(1, center - MOBILE_WINDOW);
+      const hi = Math.min(TOTAL_FRAMES, center + MOBILE_WINDOW);
+
+      const missing: number[] = [];
+      for (let i = lo; i <= hi; i++) {
+        if (!framesRef.current.has(i) && !decodingRef.current.has(i)) {
+          missing.push(i);
+        }
+      }
+      if (missing.length) {
+        missing.sort((a, b) => Math.abs(a - center) - Math.abs(b - center));
+        for (const idx of missing.slice(0, 5)) void decodeFrame(idx);
+      }
+      evictIfNeeded(center);
+    };
+
+    const timer = setInterval(topUp, 100);
+    topUp();
+    return () => clearInterval(timer);
+  }, [decodeFrame, evictIfNeeded]);
 
   // ─── Resize / orientation listener ───────────────────────────────────────
   useEffect(() => {
@@ -447,28 +617,43 @@ export default function TopLandingScrollytelling({
     };
   }, [handleResize]);
 
-  // ─── Desktop scroll listener (spring physics target) ─────────────────────
-  // Mobile does NOT use this — it reads scrollY directly in rAF for zero lag.
+  // ─── Scroll listener ──────────────────────────────────────────────────────
+  // Coalesced to one read per frame. Mobile reads the cached value in rAF so it
+  // never forces a synchronous layout while scrolling; desktop updates the
+  // spring target from the same read.
   useEffect(() => {
-    const handleScroll = () => {
-      if (isMobileRef.current) return;
-      const totalScrollable = totalScrollableRef.current;
-      if (totalScrollable <= 0) return;
-      const progress = Math.max(0, Math.min(1, window.scrollY / totalScrollable));
-      targetProgressRef.current = progress;
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const y = window.scrollY;
+      scrollYRef.current = y;
+      if (!isMobileRef.current) {
+        const totalScrollable = totalScrollableRef.current;
+        if (totalScrollable > 0) {
+          targetProgressRef.current = Math.max(
+            0,
+            Math.min(1, y / totalScrollable)
+          );
+        }
+      }
     };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // ─── rAF render loop ──────────────────────────────────────────────────────
-  // Mobile:  Reads window.scrollY DIRECTLY each frame — ZERO interpolation lag.
-  //          The phone OS natively handles inertia/deceleration. Adding JS lerp
-  //          on top creates double-smoothing which looks like sticking.
-  // Desktop: Exact 40%-slower spring-damped wheel physics (100% untouched).
+  // ─── rAF render loop (paused while the hero is off-screen) ────────────────
+  // Mobile:  reads the cached scroll position each frame — ZERO layout reads
+  //          and zero interpolation lag. The phone OS handles inertia.
+  // Desktop: exact 40%-slower spring-damped wheel physics (unchanged).
   useEffect(() => {
-    let animId: number;
+    let animId = 0;
+    let running = false;
     let lastTime = performance.now();
 
     const loop = (now: number) => {
@@ -476,18 +661,20 @@ export default function TopLandingScrollytelling({
       lastTime = now;
 
       const isMob = isMobileRef.current;
-
       let frameIdx: number;
 
       if (isMob) {
-        // ── MOBILE: direct scroll-position → frame mapping, zero lag ────
         const totalScrollable = totalScrollableRef.current;
-        const rawProgress = totalScrollable > 0
-          ? Math.max(0, Math.min(1, window.scrollY / totalScrollable))
-          : 0;
+        const rawProgress =
+          totalScrollable > 0
+            ? Math.max(0, Math.min(1, scrollYRef.current / totalScrollable))
+            : 0;
         frameIdx = Math.max(
           1,
-          Math.min(TOTAL_FRAMES, Math.round(rawProgress * (TOTAL_FRAMES - 1)) + 1)
+          Math.min(
+            TOTAL_FRAMES,
+            Math.round(rawProgress * (TOTAL_FRAMES - 1)) + 1
+          )
         );
 
         const shouldShowHint = rawProgress < 0.04;
@@ -496,10 +683,12 @@ export default function TopLandingScrollytelling({
           setShowScrollHint(shouldShowHint);
         }
       } else {
-        // ── DESKTOP: exact 40%-slower spring-damped wheel physics ────────
         const diff = targetProgressRef.current - currentProgressRef.current;
 
-        if (Math.abs(diff) > 0.00003 || Math.abs(velocityRef.current) > 0.00003) {
+        if (
+          Math.abs(diff) > 0.00003 ||
+          Math.abs(velocityRef.current) > 0.00003
+        ) {
           const desiredVelocity = diff * 0.044;
           velocityRef.current +=
             (desiredVelocity - velocityRef.current) * Math.min(1, 0.24 * dt);
@@ -532,6 +721,7 @@ export default function TopLandingScrollytelling({
         );
       }
 
+      currentFrameRef.current = frameIdx;
       drawFrame(frameIdx);
 
       for (const scene of SCENES) {
@@ -547,8 +737,35 @@ export default function TopLandingScrollytelling({
       animId = requestAnimationFrame(loop);
     };
 
-    animId = requestAnimationFrame(loop);
-    return () => { if (animId) cancelAnimationFrame(animId); };
+    const start = () => {
+      if (running) return;
+      running = true;
+      lastTime = performance.now();
+      animId = requestAnimationFrame(loop);
+    };
+    const stop = () => {
+      if (!running) return;
+      running = false;
+      cancelAnimationFrame(animId);
+    };
+
+    // Only burn frames while the hero is actually on screen.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries[0]?.isIntersecting ?? true;
+        visibleRef.current = visible;
+        if (visible) start();
+        else stop();
+      },
+      { threshold: 0 }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+
+    start();
+    return () => {
+      stop();
+      observer.disconnect();
+    };
   }, [drawFrame]);
 
   return (
@@ -562,7 +779,7 @@ export default function TopLandingScrollytelling({
         {/* Fullscreen Video Canvas */}
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-cover object-center block z-0 will-change-transform transform-gpu"
+          className="absolute inset-0 w-full h-full object-cover object-center block z-0 transform-gpu"
         />
 
         {/* Subtle directional shadow gradient for text contrast */}
