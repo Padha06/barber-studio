@@ -294,9 +294,17 @@ export default function TopLandingScrollytelling({
       // 1. Frame 1 immediately
       await loadAndDecodeFrame(1);
 
-      // Build base queue: stride 4 first, then stride 2, then stride 1
+      // Build base queue:
+      // On mobile, prioritize the first 45 frames (stride 2) first so the very first thumb swipe is ready in <200ms
       const queue: number[] = [];
       const queuedSet = new Set<number>([1]);
+
+      if (isMobile) {
+        for (let i = 2; i <= 46; i += 2) {
+          queuedSet.add(i);
+          queue.push(i);
+        }
+      }
 
       for (const stride of [4, 2, 1]) {
         for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
@@ -312,10 +320,10 @@ export default function TopLandingScrollytelling({
       let cursor = 0;
 
       const getNextFrameToLoad = (): number | null => {
-        // First check if any frame in the immediate lookahead window [curr .. curr+20] is unloaded
+        // First check if any frame in the immediate lookahead window [curr .. curr+24] is unloaded
         const curr =
           Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1;
-        for (let offset = 0; offset <= 20; offset++) {
+        for (let offset = 0; offset <= 24; offset++) {
           const target = curr + offset;
           if (
             target >= 1 &&
@@ -397,7 +405,7 @@ export default function TopLandingScrollytelling({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Zero-re-render, frame-rate independent, velocity-smoothed 60/120fps loop
+  // Zero-re-render, frame-rate independent 60/120fps loop
   useEffect(() => {
     let animId: number;
     let lastTime = performance.now();
@@ -408,30 +416,37 @@ export default function TopLandingScrollytelling({
       lastTime = now;
 
       const diff = targetProgressRef.current - currentProgressRef.current;
+      const isMob = isMobileRef.current;
 
-      if (Math.abs(diff) > 0.00003 || Math.abs(velocityRef.current) > 0.00003) {
-        // Desktop stays at exact 0.044 / 0.0038; Mobile tuned for silky touch momentum
-        const isMob = isMobileRef.current;
-        const springFactor = isMob ? 0.052 : 0.044;
-        const accelBlend = isMob ? 0.28 : 0.24;
-        const maxVelocity = isMob ? 0.0045 : 0.0038;
-
-        const desiredVelocity = diff * springFactor;
-        velocityRef.current +=
-          (desiredVelocity - velocityRef.current) * Math.min(1, accelBlend * dt);
-
-        const clampedVel = Math.max(
-          -maxVelocity,
-          Math.min(maxVelocity, velocityRef.current)
-        );
-
-        currentProgressRef.current = Math.max(
-          0,
-          Math.min(1, currentProgressRef.current + clampedVel * dt)
-        );
+      if (isMob) {
+        // Mobile: Native iOS/Android touch scroll already has hardware inertia.
+        // Use a direct, responsive silky micro-lerp (0.14 * dt) with zero velocity clamping so thumb swipes feel like butter.
+        if (Math.abs(diff) > 0.00003) {
+          currentProgressRef.current += diff * Math.min(1, 0.14 * dt);
+        } else {
+          currentProgressRef.current = targetProgressRef.current;
+        }
       } else {
-        currentProgressRef.current = targetProgressRef.current;
-        velocityRef.current = 0;
+        // Desktop: Keep exact 40%-slower spring-damped wheel physics (100% untouched)
+        if (Math.abs(diff) > 0.00003 || Math.abs(velocityRef.current) > 0.00003) {
+          const desiredVelocity = diff * 0.044;
+          velocityRef.current +=
+            (desiredVelocity - velocityRef.current) * Math.min(1, 0.24 * dt);
+
+          const maxVelocity = 0.0038;
+          const clampedVel = Math.max(
+            -maxVelocity,
+            Math.min(maxVelocity, velocityRef.current)
+          );
+
+          currentProgressRef.current = Math.max(
+            0,
+            Math.min(1, currentProgressRef.current + clampedVel * dt)
+          );
+        } else {
+          currentProgressRef.current = targetProgressRef.current;
+          velocityRef.current = 0;
+        }
       }
 
       const p = currentProgressRef.current;
@@ -476,8 +491,7 @@ export default function TopLandingScrollytelling({
     <div
       ref={containerRef}
       id="hero"
-      className="relative bg-white w-full"
-      style={{ height: "1120vh" }}
+      className="relative bg-white w-full h-[650vh] md:h-[1120vh]"
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-svh md:h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
