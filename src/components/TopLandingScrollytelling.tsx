@@ -9,8 +9,8 @@ interface TopLandingScrollytellingProps {
 }
 
 const TOTAL_FRAMES = 290;
-const MOBILE_W = 504;
-const MOBILE_H = 896;
+const MOBILE_W = 576;
+const MOBILE_H = 1024;
 
 // ── Mobile memory budget ───────────────────────────────────────────────────
 // A decoded 504×896 RGBA frame is ~1.8 MB. Holding all 290 pinned (ImageBitmap)
@@ -132,6 +132,8 @@ export default function TopLandingScrollytelling({
   const scrollYRef = useRef<number>(0);
   const currentFrameRef = useRef<number>(1);
   const visibleRef = useRef<boolean>(true);
+  const scrollDirRef = useRef<number>(1);
+  const lastScrollYRef = useRef<number>(0);
 
   // Desktop-only spring physics state
   const targetProgressRef = useRef(0);
@@ -579,27 +581,51 @@ export default function TopLandingScrollytelling({
 
   // ─── Mobile sliding-window decoder ────────────────────────────────────────
   // Keeps a bounded, sharp window around the current frame and evicts the rest.
+  // Decoding is prioritised along the scroll direction so a fast fling never
+  // outruns the window, and the batch grows when we fall behind.
   useEffect(() => {
+    const MAX_INFLIGHT = 8;
+
     const topUp = () => {
       if (!isMobileRef.current || !visibleRef.current) return;
       const center = currentFrameRef.current;
+      const dir = scrollDirRef.current >= 0 ? 1 : -1;
       const lo = Math.max(1, center - MOBILE_WINDOW);
       const hi = Math.min(TOTAL_FRAMES, center + MOBILE_WINDOW);
 
-      const missing: number[] = [];
-      for (let i = lo; i <= hi; i++) {
-        if (!framesRef.current.has(i) && !decodingRef.current.has(i)) {
-          missing.push(i);
+      // Nearest-first, biased in the direction of travel.
+      const order: number[] = [];
+      for (let d = 0; d <= MOBILE_WINDOW; d++) {
+        const ahead = center + d * dir;
+        const behind = center - d * dir;
+        if (ahead >= lo && ahead <= hi) order.push(ahead);
+        if (d !== 0 && behind >= lo && behind <= hi) order.push(behind);
+      }
+
+      let missingAhead = 0;
+      for (const idx of order) {
+        if (!framesRef.current.has(idx)) {
+          missingAhead++;
+          if (missingAhead >= 24) break;
         }
       }
-      if (missing.length) {
-        missing.sort((a, b) => Math.abs(a - center) - Math.abs(b - center));
-        for (const idx of missing.slice(0, 5)) void decodeFrame(idx);
+      const batchSize = missingAhead >= 20 ? 10 : missingAhead >= 8 ? 6 : 3;
+
+      let inflight = decodingRef.current.size;
+      let dispatched = 0;
+      for (const idx of order) {
+        if (dispatched >= batchSize || inflight >= MAX_INFLIGHT) break;
+        if (framesRef.current.has(idx)) continue;
+        if (decodingRef.current.has(idx)) continue;
+        void decodeFrame(idx);
+        inflight++;
+        dispatched++;
       }
+
       evictIfNeeded(center);
     };
 
-    const timer = setInterval(topUp, 100);
+    const timer = setInterval(topUp, 60);
     topUp();
     return () => clearInterval(timer);
   }, [decodeFrame, evictIfNeeded]);
@@ -664,10 +690,16 @@ export default function TopLandingScrollytelling({
       let frameIdx: number;
 
       if (isMob) {
+        const y = scrollYRef.current;
+        const dy = y - lastScrollYRef.current;
+        lastScrollYRef.current = y;
+        if (dy > 1) scrollDirRef.current = 1;
+        else if (dy < -1) scrollDirRef.current = -1;
+
         const totalScrollable = totalScrollableRef.current;
         const rawProgress =
           totalScrollable > 0
-            ? Math.max(0, Math.min(1, scrollYRef.current / totalScrollable))
+            ? Math.max(0, Math.min(1, y / totalScrollable))
             : 0;
         frameIdx = Math.max(
           1,
