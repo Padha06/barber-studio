@@ -580,29 +580,14 @@ export default function TopLandingScrollytelling({
       let frameIdx: number;
 
       if (isMob) {
+        // Direct, stable tracking on mobile:
+        // Follows the touch scroll smoothly and settles immediately when touch stops,
+        // stopping runaway auto-scrolling so each scroll rests on a stable, crisp frame.
         const diff = targetProgressRef.current - currentProgressRef.current;
-        if (
-          Math.abs(diff) > 0.00003 ||
-          Math.abs(mobileVelocityRef.current) > 0.00003
-        ) {
-          // Touch spring physics: snappy finger tracking with silky momentum carry-through
-          const desiredVelocity = diff * 0.18;
-          mobileVelocityRef.current +=
-            (desiredVelocity - mobileVelocityRef.current) * Math.min(1, 0.45 * dt);
-
-          const maxVelocity = 0.040;
-          const clampedVel = Math.max(
-            -maxVelocity,
-            Math.min(maxVelocity, mobileVelocityRef.current)
-          );
-
-          currentProgressRef.current = Math.max(
-            0,
-            Math.min(1, currentProgressRef.current + clampedVel * dt)
-          );
+        if (Math.abs(diff) > 0.0001) {
+          currentProgressRef.current += diff * Math.min(1, 0.65 * dt);
         } else {
           currentProgressRef.current = targetProgressRef.current;
-          mobileVelocityRef.current = 0;
         }
 
         const p = currentProgressRef.current;
