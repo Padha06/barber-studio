@@ -12,16 +12,6 @@ const TOTAL_FRAMES = 290;
 const MOBILE_W = 576;
 const MOBILE_H = 1024;
 
-// ── Mobile memory budget ───────────────────────────────────────────────────
-// A decoded 504×896 RGBA frame is ~1.8 MB. Holding all 290 pinned (ImageBitmap)
-// means ~520 MB resident → memory pressure / GC thrash / dropped frames on any
-// phone. We instead keep the compressed frames (~5 MB total) and only decode a
-// sliding window around the current scroll position, evicting the rest.
-const MOBILE_WINDOW = 30; // decode ±N frames around current position
-const MOBILE_MAX_DECODED = 78; // hard ceiling on resident decoded frames (~140 MB)
-const MOBILE_EVICT_RADIUS = 34; // never evict frames within this distance
-const MOBILE_BLOB_CONCURRENCY = 8;
-
 interface CaptionScene {
   id: number;
   tag: string;
@@ -104,23 +94,18 @@ export default function TopLandingScrollytelling({
 }: TopLandingScrollytellingProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   const [activeScene, setActiveScene] = useState<CaptionScene>(SCENES[0]);
   const [showScrollHint, setShowScrollHint] = useState(true);
 
-  // Decoded frames ready to draw (ImageBitmap on mobile, HTMLImageElement on desktop)
+  // Desktop-only decoded frames store (HTMLImageElement). Mobile uses the
+  // native <video> element instead — zero JS decode work on scroll.
   const framesRef = useRef<Map<number, ImageBitmap | HTMLImageElement>>(
     new Map()
   );
   const loadedSetRef = useRef<Set<number>>(new Set());
-
-  // Mobile-only: compressed blobs + bounded decode window bookkeeping
-  const blobCacheRef = useRef<Map<number, Blob>>(new Map());
-  const blobPromiseRef = useRef<Map<number, Promise<Blob | null>>>(new Map());
-  const decodingRef = useRef<Set<number>>(new Set());
-  const decodedUsageRef = useRef<Map<number, number>>(new Map());
-  const usageTickRef = useRef(0);
 
   // Scroll state — single source of truth, read directly from DOM
   const lastDrawnFrameRef = useRef<number>(-1);
@@ -132,8 +117,6 @@ export default function TopLandingScrollytelling({
   const scrollYRef = useRef<number>(0);
   const currentFrameRef = useRef<number>(1);
   const visibleRef = useRef<boolean>(true);
-  const scrollDirRef = useRef<number>(1);
-  const lastScrollYRef = useRef<number>(0);
 
   // Desktop-only spring physics state
   const targetProgressRef = useRef(0);
@@ -154,123 +137,12 @@ export default function TopLandingScrollytelling({
       : `/frames/frame-${padded}.webp`;
   }, []);
 
-  // ─── Mobile decode helpers ────────────────────────────────────────────────
-  const getBlob = useCallback(
-    (idx: number): Promise<Blob | null> => {
-      const cached = blobCacheRef.current.get(idx);
-      if (cached) return Promise.resolve(cached);
-      const pending = blobPromiseRef.current.get(idx);
-      if (pending) return pending;
-
-      const p = fetch(getFrameUrl(idx, true))
-        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("http"))))
-        .then((blob) => {
-          blobCacheRef.current.set(idx, blob);
-          return blob;
-        })
-        .catch(() => null)
-        .finally(() => {
-          blobPromiseRef.current.delete(idx);
-        });
-
-      blobPromiseRef.current.set(idx, p);
-      return p;
-    },
-    [getFrameUrl]
-  );
-
-  const touchFrame = useCallback((idx: number) => {
-    decodedUsageRef.current.set(idx, ++usageTickRef.current);
-  }, []);
-
-  const evictIfNeeded = useCallback((center: number) => {
-    const frames = framesRef.current;
-    if (frames.size <= MOBILE_MAX_DECODED) return;
-
-    const evictable: number[] = [];
-    for (const idx of frames.keys()) {
-      if (Math.abs(idx - center) > MOBILE_EVICT_RADIUS) evictable.push(idx);
-    }
-    evictable.sort(
-      (a, b) =>
-        (decodedUsageRef.current.get(a) ?? 0) -
-        (decodedUsageRef.current.get(b) ?? 0)
-    );
-
-    let need = frames.size - MOBILE_MAX_DECODED;
-    for (const idx of evictable) {
-      if (need <= 0) break;
-      const value = frames.get(idx);
-      if (value instanceof ImageBitmap) value.close();
-      frames.delete(idx);
-      loadedSetRef.current.delete(idx);
-      decodedUsageRef.current.delete(idx);
-      need--;
-    }
-  }, []);
-
-  const decodeFrame = useCallback(
-    (idx: number): Promise<void> => {
-      if (idx < 1 || idx > TOTAL_FRAMES) return Promise.resolve();
-      if (framesRef.current.has(idx) || decodingRef.current.has(idx)) {
-        touchFrame(idx);
-        return Promise.resolve();
-      }
-      decodingRef.current.add(idx);
-
-      const store = (value: ImageBitmap | HTMLImageElement) => {
-        if (framesRef.current.has(idx)) {
-          if (value instanceof ImageBitmap) value.close();
-          return;
-        }
-        framesRef.current.set(idx, value);
-        loadedSetRef.current.add(idx);
-        touchFrame(idx);
-        evictIfNeeded(currentFrameRef.current);
-      };
-
-      return getBlob(idx)
-        .then((blob) => {
-          if (!blob) return;
-          if (typeof createImageBitmap === "function") {
-            return createImageBitmap(blob).then(store);
-          }
-          // Fallback for engines without createImageBitmap
-          return new Promise<void>((resolve) => {
-            const url = URL.createObjectURL(blob);
-            const img = new Image();
-            img.decoding = "async";
-            img.onload = () => {
-              URL.revokeObjectURL(url);
-              store(img);
-              resolve();
-            };
-            img.onerror = () => {
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            img.src = url;
-          });
-        })
-        .catch(() => {})
-        .finally(() => {
-          decodingRef.current.delete(idx);
-        }) as Promise<void>;
-    },
-    [getBlob, touchFrame, evictIfNeeded]
-  );
-
-  // ─── drawFrame ────────────────────────────────────────────────────────────
-  // Mobile:  1:1 unscaled GPU blit onto fixed 504×896 buffer (<0.02ms).
-  //          CSS object-cover on the canvas scales it on the HW compositor.
+  // ─── drawFrame (DESKTOP ONLY — mobile renders the native video) ────────────
   // Desktop: exact cover-scaled draw into the DPR-aware canvas buffer.
   const drawFrame = useCallback((frameIdx: number, force = false) => {
-    const isMob = isMobileRef.current;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // If the exact frame isn't decoded yet, fall back to the closest resident
-    // frame so the canvas never goes blank while the window top-up catches up.
     let targetIdx = frameIdx;
     if (!framesRef.current.has(targetIdx)) {
       let best = -1;
@@ -302,15 +174,10 @@ export default function TopLandingScrollytelling({
 
     lastDrawnFrameRef.current = targetIdx;
 
-    if (isMob) {
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(source, 0, 0, MOBILE_W, MOBILE_H);
-    } else {
-      const { x, y, w, h } = drawRectRef.current;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "medium";
-      ctx.drawImage(source, x, y, w, h);
-    }
+    const { x, y, w, h } = drawRectRef.current;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "medium";
+    ctx.drawImage(source, x, y, w, h);
   }, []);
 
   // ─── handleResize ─────────────────────────────────────────────────────────
@@ -383,58 +250,23 @@ export default function TopLandingScrollytelling({
         drawRectRef.current = { x: drawX, y: drawY, w: drawW, h: drawH };
       }
 
-      const p = isMobileRef.current
-        ? Math.max(
-            0,
-            Math.min(1, scrollYRef.current / totalScrollableRef.current)
-          )
-        : currentProgressRef.current;
+      const p = currentProgressRef.current;
       const currentFrame = Math.max(
         1,
         Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
       );
-      drawFrame(currentFrame, true);
+      if (!isMobileRef.current) drawFrame(currentFrame, true);
     },
     [drawFrame]
   );
 
-  // ─── Frame preload pipeline ───────────────────────────────────────────────
+  // ─── Frame preload pipeline (DESKTOP ONLY — mobile streams the MP4) ────────
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
+    if (isMobile) return;
+
     let isCancelled = false;
-
-    if (isMobile) {
-      // Mobile: decode the very first frame for instant paint, then stream the
-      // compressed frames into the blob cache in the background. Decoding is
-      // driven by the bounded window manager (see below).
-      decodeFrame(1).then(() => {
-        if (isCancelled) return;
-        handleResize(true);
-        drawFrame(1, true);
-      });
-
-      const prefetchBlobs = async () => {
-        let cursor = 1;
-        const worker = async () => {
-          while (!isCancelled) {
-            const idx = cursor++;
-            if (idx > TOTAL_FRAMES) break;
-            await getBlob(idx);
-          }
-        };
-        await Promise.all(
-          Array.from({ length: MOBILE_BLOB_CONCURRENCY }, () => worker())
-        );
-      };
-      void prefetchBlobs();
-
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    // ── Desktop strategy (unchanged): stride 4 → 2 → 1 as HTMLImageElement ──
     const loadingSet = new Set<number>();
 
     const loadAndDecodeFrame = async (idx: number): Promise<void> => {
@@ -577,58 +409,7 @@ export default function TopLandingScrollytelling({
     return () => {
       isCancelled = true;
     };
-  }, [decodeFrame, getBlob, handleResize, drawFrame, getFrameUrl]);
-
-  // ─── Mobile sliding-window decoder ────────────────────────────────────────
-  // Keeps a bounded, sharp window around the current frame and evicts the rest.
-  // Decoding is prioritised along the scroll direction so a fast fling never
-  // outruns the window, and the batch grows when we fall behind.
-  useEffect(() => {
-    const MAX_INFLIGHT = 8;
-
-    const topUp = () => {
-      if (!isMobileRef.current || !visibleRef.current) return;
-      const center = currentFrameRef.current;
-      const dir = scrollDirRef.current >= 0 ? 1 : -1;
-      const lo = Math.max(1, center - MOBILE_WINDOW);
-      const hi = Math.min(TOTAL_FRAMES, center + MOBILE_WINDOW);
-
-      // Nearest-first, biased in the direction of travel.
-      const order: number[] = [];
-      for (let d = 0; d <= MOBILE_WINDOW; d++) {
-        const ahead = center + d * dir;
-        const behind = center - d * dir;
-        if (ahead >= lo && ahead <= hi) order.push(ahead);
-        if (d !== 0 && behind >= lo && behind <= hi) order.push(behind);
-      }
-
-      let missingAhead = 0;
-      for (const idx of order) {
-        if (!framesRef.current.has(idx)) {
-          missingAhead++;
-          if (missingAhead >= 24) break;
-        }
-      }
-      const batchSize = missingAhead >= 20 ? 10 : missingAhead >= 8 ? 6 : 3;
-
-      let inflight = decodingRef.current.size;
-      let dispatched = 0;
-      for (const idx of order) {
-        if (dispatched >= batchSize || inflight >= MAX_INFLIGHT) break;
-        if (framesRef.current.has(idx)) continue;
-        if (decodingRef.current.has(idx)) continue;
-        void decodeFrame(idx);
-        inflight++;
-        dispatched++;
-      }
-
-      evictIfNeeded(center);
-    };
-
-    const timer = setInterval(topUp, 60);
-    topUp();
-    return () => clearInterval(timer);
-  }, [decodeFrame, evictIfNeeded]);
+  }, [handleResize, drawFrame, getFrameUrl]);
 
   // ─── Resize / orientation listener ───────────────────────────────────────
   useEffect(() => {
@@ -673,9 +454,22 @@ export default function TopLandingScrollytelling({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // ─── Mobile video autoplay hardening ──────────────────────────────────────
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = true;
+    const tryPlay = () => {
+      video.play().catch(() => {});
+    };
+    tryPlay();
+    video.addEventListener("canplay", tryPlay);
+    return () => video.removeEventListener("canplay", tryPlay);
+  }, []);
+
   // ─── rAF render loop (paused while the hero is off-screen) ────────────────
-  // Mobile:  reads the cached scroll position each frame — ZERO layout reads
-  //          and zero interpolation lag. The phone OS handles inertia.
+  // Mobile:  video plays natively (hardware-decoded, always smooth). Scroll
+  //          only drives captions / hint / CTA — zero canvas work.
   // Desktop: exact 40%-slower spring-damped wheel physics (unchanged).
   useEffect(() => {
     let animId = 0;
@@ -687,34 +481,34 @@ export default function TopLandingScrollytelling({
       lastTime = now;
 
       const isMob = isMobileRef.current;
-      let frameIdx: number;
 
       if (isMob) {
-        const y = scrollYRef.current;
-        const dy = y - lastScrollYRef.current;
-        lastScrollYRef.current = y;
-        if (dy > 1) scrollDirRef.current = 1;
-        else if (dy < -1) scrollDirRef.current = -1;
-
+        // ── MOBILE: progress → caption scene, no canvas work ─────────────
         const totalScrollable = totalScrollableRef.current;
         const rawProgress =
           totalScrollable > 0
-            ? Math.max(0, Math.min(1, y / totalScrollable))
+            ? Math.max(0, Math.min(1, scrollYRef.current / totalScrollable))
             : 0;
-        frameIdx = Math.max(
-          1,
-          Math.min(
-            TOTAL_FRAMES,
-            Math.round(rawProgress * (TOTAL_FRAMES - 1)) + 1
-          )
-        );
 
         const shouldShowHint = rawProgress < 0.04;
         if (shouldShowHint !== showScrollHintRef.current) {
           showScrollHintRef.current = shouldShowHint;
           setShowScrollHint(shouldShowHint);
         }
+
+        for (const scene of SCENES) {
+          const s = (scene.frameStart - 1) / TOTAL_FRAMES;
+          const e = scene.frameEnd / TOTAL_FRAMES;
+          if (rawProgress >= s && rawProgress <= e) {
+            if (activeSceneIdRef.current !== scene.id) {
+              activeSceneIdRef.current = scene.id;
+              setActiveScene(scene);
+            }
+            break;
+          }
+        }
       } else {
+        // ── DESKTOP: exact 40%-slower spring-damped wheel physics ────────
         const diff = targetProgressRef.current - currentProgressRef.current;
 
         if (
@@ -747,22 +541,21 @@ export default function TopLandingScrollytelling({
           setShowScrollHint(shouldShowHint);
         }
 
-        frameIdx = Math.max(
+        const frameIdx = Math.max(
           1,
           Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
         );
-      }
+        currentFrameRef.current = frameIdx;
+        drawFrame(frameIdx);
 
-      currentFrameRef.current = frameIdx;
-      drawFrame(frameIdx);
-
-      for (const scene of SCENES) {
-        if (frameIdx >= scene.frameStart && frameIdx <= scene.frameEnd) {
-          if (activeSceneIdRef.current !== scene.id) {
-            activeSceneIdRef.current = scene.id;
-            setActiveScene(scene);
+        for (const scene of SCENES) {
+          if (frameIdx >= scene.frameStart && frameIdx <= scene.frameEnd) {
+            if (activeSceneIdRef.current !== scene.id) {
+              activeSceneIdRef.current = scene.id;
+              setActiveScene(scene);
+            }
+            break;
           }
-          break;
         }
       }
 
@@ -782,12 +575,19 @@ export default function TopLandingScrollytelling({
     };
 
     // Only burn frames while the hero is actually on screen.
+    // On mobile this also pauses/resumes the native video.
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries[0]?.isIntersecting ?? true;
         visibleRef.current = visible;
-        if (visible) start();
-        else stop();
+        const video = videoRef.current;
+        if (visible) {
+          start();
+          if (isMobileRef.current && video) video.play().catch(() => {});
+        } else {
+          stop();
+          if (isMobileRef.current && video) video.pause();
+        }
       },
       { threshold: 0 }
     );
@@ -808,10 +608,27 @@ export default function TopLandingScrollytelling({
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-svh md:h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
-        {/* Fullscreen Video Canvas */}
+        {/* Desktop canvas (hidden on mobile) */}
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-cover object-center block z-0 transform-gpu"
+          className="absolute inset-0 w-full h-full object-cover object-center hidden md:block z-0 transform-gpu"
+        />
+
+        {/* Mobile native video (hidden on desktop) — hardware-decoded, always smooth */}
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-cover object-center block md:hidden z-0"
+          src="/hero-mobile.mp4"
+          poster="/frames-mobile/frame-001.webp"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          disablePictureInPicture
+          controls={false}
+          aria-hidden="true"
+          tabIndex={-1}
         />
 
         {/* Subtle directional shadow gradient for text contrast */}
