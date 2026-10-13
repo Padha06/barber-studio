@@ -15,10 +15,9 @@ const TOTAL_FRAMES = 290;
 // from mismatched crop math.
 const MOBILE_W = 540;
 const MOBILE_H = 960;
-// Mobile ships a 145-frame set (every other source sample) so the decoded
-// working set stays ~57 MB — small enough that the browser never evicts
-// bitmaps mid-scroll, which was the cause of sync re-decode hitches.
-const MOBILE_TOTAL_FRAMES = 145;
+// Mobile ships an expanded 180-frame set (40 drone & street intro + 140 luxury interior).
+// Preloaded via createImageBitmap off-main-thread with zero GPU tearing.
+const MOBILE_TOTAL_FRAMES = 180;
 
 interface CaptionScene {
   id: number;
@@ -27,7 +26,7 @@ interface CaptionScene {
   title: string;
   subtitle: string;
   // Normalized scroll progress [0, 1], breakpoint-agnostic so captions swap
-  // at the same scroll position on both 290-frame desktop and 145-frame
+  // at the same scroll position on both 290-frame desktop and 180-frame
   // mobile sequences.
   progressStart: number;
   progressEnd: number;
@@ -36,7 +35,7 @@ interface CaptionScene {
 const SCENES: CaptionScene[] = [
   {
     id: 1,
-    tag: "01 / EXTERIOR • NERUL WEST",
+    tag: "01 / THE ARRIVAL • NERUL WEST",
     timecode: "00:00 — 00:01",
     title: "Where luxury begins.",
     subtitle: "Welcome to H&S Salon.",
@@ -183,7 +182,7 @@ export default function TopLandingScrollytelling({
     if (!ctxRef.current) {
       ctxRef.current = canvas.getContext("2d", {
         alpha: false,
-        desynchronized: true,
+        desynchronized: false,
       });
     }
     const ctx = ctxRef.current;
@@ -195,7 +194,8 @@ export default function TopLandingScrollytelling({
     lastDrawnFrameRef.current = targetIdx;
 
     if (isMob) {
-      ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "medium";
       ctx.drawImage(source, 0, 0, MOBILE_W, MOBILE_H);
     } else {
       const { x, y, w, h } = drawRectRef.current;
