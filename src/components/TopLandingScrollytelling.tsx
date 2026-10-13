@@ -131,10 +131,11 @@ export default function TopLandingScrollytelling({
   const scrollDirRef = useRef<number>(1);
   const lastScrollYRef = useRef<number>(0);
 
-  // Desktop-only spring physics state
+  // Desktop & mobile spring physics state
   const targetProgressRef = useRef(0);
   const currentProgressRef = useRef(0);
   const velocityRef = useRef(0);
+  const mobileVelocityRef = useRef(0);
 
   const drawRectRef = useRef<{ x: number; y: number; w: number; h: number }>({
     x: 0,
@@ -554,10 +555,28 @@ export default function TopLandingScrollytelling({
 
       if (isMob) {
         const diff = targetProgressRef.current - currentProgressRef.current;
-        if (Math.abs(diff) > 0.0001) {
-          currentProgressRef.current += diff * Math.min(1, 0.35 * dt);
+        if (
+          Math.abs(diff) > 0.00003 ||
+          Math.abs(mobileVelocityRef.current) > 0.00003
+        ) {
+          // Touch spring physics: responsive acceleration with silky momentum carry-through
+          const desiredVelocity = diff * 0.095;
+          mobileVelocityRef.current +=
+            (desiredVelocity - mobileVelocityRef.current) * Math.min(1, 0.32 * dt);
+
+          const maxVelocity = 0.012;
+          const clampedVel = Math.max(
+            -maxVelocity,
+            Math.min(maxVelocity, mobileVelocityRef.current)
+          );
+
+          currentProgressRef.current = Math.max(
+            0,
+            Math.min(1, currentProgressRef.current + clampedVel * dt)
+          );
         } else {
           currentProgressRef.current = targetProgressRef.current;
+          mobileVelocityRef.current = 0;
         }
 
         const p = currentProgressRef.current;
