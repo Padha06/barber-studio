@@ -99,21 +99,25 @@ export default function TopLandingScrollytelling({
   const [activeScene, setActiveScene] = useState<CaptionScene>(SCENES[0]);
   const [showScrollHint, setShowScrollHint] = useState(true);
 
-  // Supports GPU-pinned ImageBitmap on mobile + HTMLImageElement on desktop
+  // Stores decoded frames: ImageBitmap on mobile (GPU-pinned, never evicted), HTMLImageElement on desktop
   const framesRef = useRef<Map<number, ImageBitmap | HTMLImageElement>>(
     new Map()
   );
-  const loadedIndicesRef = useRef<number[]>([]);
-  const targetProgressRef = useRef(0);
-  const currentProgressRef = useRef(0);
-  const velocityRef = useRef(0);
+  const loadedSetRef = useRef<Set<number>>(new Set());
+
+  // Scroll state — single source of truth, read directly from DOM
   const lastDrawnFrameRef = useRef<number>(-1);
   const activeSceneIdRef = useRef<number>(1);
   const showScrollHintRef = useRef<boolean>(true);
   const isMobileRef = useRef<boolean>(false);
   const lastWidthRef = useRef<number>(0);
   const totalScrollableRef = useRef<number>(5000);
-  const lastScrollEventTimeRef = useRef<number>(0);
+
+  // Desktop-only spring physics state
+  const targetProgressRef = useRef(0);
+  const currentProgressRef = useRef(0);
+  const velocityRef = useRef(0);
+
   const drawRectRef = useRef<{ x: number; y: number; w: number; h: number }>({
     x: 0,
     y: 0,
@@ -128,17 +132,26 @@ export default function TopLandingScrollytelling({
       : `/frames/frame-${padded}.webp`;
   };
 
-  // Draw frame on canvas:
-  // - On mobile: 1:1 unscaled 504x896 ImageBitmap GPU blit (<0.02ms), scaled by CSS object-cover on hardware compositor
-  // - On desktop: exact 1920x1080 cover draw
+  // ─── drawFrame ────────────────────────────────────────────────────────────
+  // Mobile:  1:1 unscaled GPU blit onto fixed 504×896 buffer (<0.02ms).
+  //          CSS object-cover on the canvas scales it on the HW compositor.
+  // Desktop: exact cover-scaled draw into the DPR-aware canvas buffer.
   const drawFrame = useCallback((frameIdx: number, force = false) => {
     const isMob = isMobileRef.current;
-    // On mobile, snap to loaded stride-2 odd frame (1, 3, 5... 289, 290) so we never miss a cached frame
-    const targetIdx = isMob
-      ? frameIdx >= TOTAL_FRAMES
-        ? TOTAL_FRAMES
-        : Math.max(1, Math.floor((frameIdx - 1) / 2) * 2 + 1)
-      : frameIdx;
+
+    // On mobile find the closest loaded frame to avoid blank frames
+    let targetIdx = frameIdx;
+    if (isMob && !loadedSetRef.current.has(frameIdx)) {
+      // Walk outward to find nearest loaded frame
+      let best = -1;
+      let bestDist = Infinity;
+      for (const idx of loadedSetRef.current) {
+        const d = Math.abs(idx - frameIdx);
+        if (d < bestDist) { bestDist = d; best = idx; }
+      }
+      if (best === -1) return;
+      targetIdx = best;
+    }
 
     if (!force && lastDrawnFrameRef.current === targetIdx) return;
 
@@ -153,33 +166,12 @@ export default function TopLandingScrollytelling({
     const ctx = ctxRef.current;
     if (!ctx) return;
 
-    let source = framesRef.current.get(targetIdx);
-    let resolvedIdx = targetIdx;
-
-    if (!source) {
-      const loaded = loadedIndicesRef.current;
-      if (loaded.length === 0) return;
-      let closest = loaded[0];
-      let minDiff = Math.abs(closest - targetIdx);
-      for (let i = 1; i < loaded.length; i++) {
-        const idx = loaded[i];
-        const diff = Math.abs(idx - targetIdx);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closest = idx;
-        }
-      }
-      source = framesRef.current.get(closest);
-      resolvedIdx = closest;
-    }
-
+    const source = framesRef.current.get(targetIdx);
     if (!source) return;
-    if (!force && lastDrawnFrameRef.current === resolvedIdx) return;
 
-    lastDrawnFrameRef.current = resolvedIdx;
+    lastDrawnFrameRef.current = targetIdx;
 
     if (isMob) {
-      // Pure 1:1 unscaled GPU blit onto 504x896 buffer (CSS object-cover handles screen fit in hardware!)
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(source, 0, 0, MOBILE_W, MOBILE_H);
     } else {
@@ -190,7 +182,7 @@ export default function TopLandingScrollytelling({
     }
   }, []);
 
-  // Responsive canvas resize
+  // ─── handleResize ─────────────────────────────────────────────────────────
   const handleResize = useCallback(
     (forceInit = false) => {
       const canvas = canvasRef.current;
@@ -201,7 +193,7 @@ export default function TopLandingScrollytelling({
       const height = window.innerHeight;
       const isMobile = width < 768;
 
-      // On mobile browsers, ignore vertical-only resize events caused by address bar hiding/showing during scroll
+      // On mobile browsers, ignore vertical-only resize events (address bar hiding/showing)
       if (
         !forceInit &&
         isMobile &&
@@ -213,14 +205,16 @@ export default function TopLandingScrollytelling({
 
       lastWidthRef.current = width;
       isMobileRef.current = isMobile;
-      ctxRef.current = null; // Re-acquire context after canvas dimension change
+      ctxRef.current = null;
 
       if (container) {
-        totalScrollableRef.current = Math.max(1, container.offsetHeight - height);
+        totalScrollableRef.current = Math.max(
+          1,
+          container.offsetHeight - height
+        );
       }
 
       if (isMobile) {
-        // Fixed 1:1 504x896 internal buffer on mobile; CSS w-full h-full object-cover scales in GPU hardware
         canvas.width = MOBILE_W;
         canvas.height = MOBILE_H;
         canvas.style.width = "100%";
@@ -242,11 +236,7 @@ export default function TopLandingScrollytelling({
         const imgAspect = 1920 / 1080;
         const canvasAspect = cw / ch;
 
-        let drawW: number;
-        let drawH: number;
-        let drawX: number;
-        let drawY: number;
-
+        let drawW: number, drawH: number, drawX: number, drawY: number;
         if (canvasAspect > imgAspect) {
           drawW = cw;
           drawH = cw / imgAspect;
@@ -262,15 +252,19 @@ export default function TopLandingScrollytelling({
         drawRectRef.current = { x: drawX, y: drawY, w: drawW, h: drawH };
       }
 
-      const currentFrame = currentProgressRef.current
-        ? Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
-        : 1;
+      const p = isMobileRef.current
+        ? Math.max(0, Math.min(1, window.scrollY / totalScrollableRef.current))
+        : currentProgressRef.current;
+      const currentFrame = Math.max(
+        1,
+        Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
+      );
       drawFrame(currentFrame, true);
     },
     [drawFrame]
   );
 
-  // Preload & pre-decode sequence frames
+  // ─── Frame preload pipeline ───────────────────────────────────────────────
   useEffect(() => {
     let isCancelled = false;
     const loadingSet = new Set<number>();
@@ -282,7 +276,7 @@ export default function TopLandingScrollytelling({
         isCancelled ||
         idx < 1 ||
         idx > TOTAL_FRAMES ||
-        framesRef.current.has(idx) ||
+        loadedSetRef.current.has(idx) ||
         loadingSet.has(idx)
       ) {
         return;
@@ -291,7 +285,6 @@ export default function TopLandingScrollytelling({
       const url = getFrameUrl(idx, isMobile);
 
       try {
-        // On mobile, use off-main-thread fetch + createImageBitmap so decoding NEVER blocks UI scroll or gets evicted!
         if (isMobile && typeof window.createImageBitmap === "function") {
           const res = await fetch(url);
           const blob = await res.blob();
@@ -302,7 +295,8 @@ export default function TopLandingScrollytelling({
             return;
           }
           framesRef.current.set(idx, bitmap);
-          loadedIndicesRef.current.push(idx);
+          loadedSetRef.current.add(idx);
+          loadingSet.delete(idx);
           if (idx === 1) {
             handleResize(true);
             drawFrame(1, true);
@@ -310,7 +304,7 @@ export default function TopLandingScrollytelling({
           return;
         }
       } catch {
-        // Fallback to HTMLImageElement below
+        // Fall through to HTMLImageElement path
       }
 
       await new Promise<void>((resolve) => {
@@ -320,12 +314,9 @@ export default function TopLandingScrollytelling({
 
         const finalize = () => {
           loadingSet.delete(idx);
-          if (isCancelled) {
-            resolve();
-            return;
-          }
+          if (isCancelled) { resolve(); return; }
           framesRef.current.set(idx, img);
-          loadedIndicesRef.current.push(idx);
+          loadedSetRef.current.add(idx);
           if (idx === 1) {
             handleResize(true);
             drawFrame(1, true);
@@ -334,13 +325,10 @@ export default function TopLandingScrollytelling({
         };
 
         if (img.decode) {
-          img
-            .decode()
-            .then(finalize)
-            .catch(() => {
-              img.onload = finalize;
-              img.onerror = () => resolve();
-            });
+          img.decode().then(finalize).catch(() => {
+            img.onload = finalize;
+            img.onerror = () => resolve();
+          });
         } else {
           img.onload = finalize;
           img.onerror = () => resolve();
@@ -350,89 +338,77 @@ export default function TopLandingScrollytelling({
     };
 
     const runPreloadPipeline = async () => {
-      // 1. Frame 1 immediately
+      // Frame 1 first — renders immediately
       await loadAndDecodeFrame(1);
 
-      const queue: number[] = [];
       const queuedSet = new Set<number>([1]);
+      const queue: number[] = [];
 
       if (isMobile) {
-        // Mobile loads 146 odd frames (1, 3, 5... 289, 290) = only 2.5 MB total & 260 MB GPU RAM (zero cache eviction!)
-        // Stage A: Every 8th frame across timeline (36 frames = 600KB) for instant full-scroll readiness
-        for (let i = 1; i <= TOTAL_FRAMES; i += 8) {
-          if (!queuedSet.has(i)) {
-            queuedSet.add(i);
-            queue.push(i);
-          }
+        // ── Mobile strategy ──────────────────────────────────────────────
+        // Stage A: Every 10th frame across the full timeline (29 frames, ~0.5 MB)
+        //          → full-range scrubbing works immediately after ~2s
+        for (let i = 1; i <= TOTAL_FRAMES; i += 10) {
+          if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
         }
-        // Stage B: All remaining odd frames (stride 2) + final frame 290
-        for (let i = 3; i <= TOTAL_FRAMES; i += 2) {
-          if (!queuedSet.has(i)) {
-            queuedSet.add(i);
-            queue.push(i);
-          }
+        // Stage B: Every 4th frame (fills gaps to ±4 frame accuracy)
+        for (let i = 1; i <= TOTAL_FRAMES; i += 4) {
+          if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
         }
-        if (!queuedSet.has(TOTAL_FRAMES)) {
-          queuedSet.add(TOTAL_FRAMES);
-          queue.push(TOTAL_FRAMES);
+        // Stage C: All remaining frames (full 290-frame fidelity)
+        for (let i = 1; i <= TOTAL_FRAMES; i++) {
+          if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
         }
       } else {
-        // Desktop: All 290 frames (stride 4 -> 2 -> 1)
+        // Desktop: stride 4 → 2 → 1
         for (const stride of [4, 2, 1]) {
           for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
-            if (!queuedSet.has(i)) {
-              queuedSet.add(i);
-              queue.push(i);
-            }
+            if (!queuedSet.has(i)) { queuedSet.add(i); queue.push(i); }
           }
         }
       }
 
-      const CONCURRENCY = isMobile ? 4 : 8;
       let cursor = 0;
 
+      // Priority: load frames immediately ahead of current scroll first
       const getNextFrameToLoad = (): number | null => {
-        const rawCurr =
-          Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1;
-        const step = isMobile ? 2 : 1;
-        const curr = isMobile
-          ? Math.max(1, Math.floor((rawCurr - 1) / 2) * 2 + 1)
-          : rawCurr;
+        const scrollProgress = Math.max(
+          0,
+          Math.min(1, window.scrollY / Math.max(1, totalScrollableRef.current))
+        );
+        const curr = Math.max(
+          1,
+          Math.min(TOTAL_FRAMES, Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1)
+        );
 
-        // Prioritize lookahead window immediately ahead of current scroll position
-        for (let offset = 0; offset <= 24; offset += step) {
-          const target = curr + offset;
+        // Lookahead: next 40 frames ahead of current position
+        for (let offset = 0; offset <= 40; offset++) {
+          const t = curr + offset;
           if (
-            target >= 1 &&
-            target <= TOTAL_FRAMES &&
-            !framesRef.current.has(target) &&
-            !loadingSet.has(target)
+            t >= 1 &&
+            t <= TOTAL_FRAMES &&
+            !loadedSetRef.current.has(t) &&
+            !loadingSet.has(t)
           ) {
-            return target;
+            return t;
           }
         }
 
+        // Fallback: sequential from queue
         while (cursor < queue.length) {
           const candidate = queue[cursor++];
-          if (!framesRef.current.has(candidate) && !loadingSet.has(candidate)) {
+          if (!loadedSetRef.current.has(candidate) && !loadingSet.has(candidate)) {
             return candidate;
           }
         }
         return null;
       };
 
+      // On mobile: 6 concurrent fetches. On desktop: 8.
+      const CONCURRENCY = isMobile ? 6 : 8;
+
       const worker = async () => {
         while (!isCancelled) {
-          // On mobile, once initial 36 keyframes are loaded, yield while user is actively scrolling so scroll gets 100% CPU/GPU
-          if (
-            isMobile &&
-            loadedIndicesRef.current.length > 36 &&
-            performance.now() - lastScrollEventTimeRef.current < 120
-          ) {
-            await new Promise((r) => setTimeout(r, 50));
-            continue;
-          }
-
           const nextIdx = getNextFrameToLoad();
           if (nextIdx === null) break;
           await loadAndDecodeFrame(nextIdx);
@@ -440,26 +416,25 @@ export default function TopLandingScrollytelling({
       };
 
       await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+
       if (!isCancelled) {
+        const scrollProgress = Math.max(
+          0,
+          Math.min(1, window.scrollY / Math.max(1, totalScrollableRef.current))
+        );
         const exactFrame = Math.max(
           1,
-          Math.min(
-            TOTAL_FRAMES,
-            Math.round(currentProgressRef.current * (TOTAL_FRAMES - 1)) + 1
-          )
+          Math.min(TOTAL_FRAMES, Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1)
         );
         drawFrame(exactFrame, true);
       }
     };
 
     runPreloadPipeline();
-
-    return () => {
-      isCancelled = true;
-    };
+    return () => { isCancelled = true; };
   }, [handleResize, drawFrame]);
 
-  // Resize and orientation change listener
+  // ─── Resize / orientation listener ───────────────────────────────────────
   useEffect(() => {
     const onResize = () => handleResize(false);
     const onOrientationChange = () => handleResize(true);
@@ -472,23 +447,26 @@ export default function TopLandingScrollytelling({
     };
   }, [handleResize]);
 
-  // Zero-reflow scroll listener (uses window.scrollY and cached totalScrollableRef—no getBoundingClientRect() layout thrashing!)
+  // ─── Desktop scroll listener (spring physics target) ─────────────────────
+  // Mobile does NOT use this — it reads scrollY directly in rAF for zero lag.
   useEffect(() => {
     const handleScroll = () => {
-      lastScrollEventTimeRef.current = performance.now();
+      if (isMobileRef.current) return;
       const totalScrollable = totalScrollableRef.current;
       if (totalScrollable <= 0) return;
-
       const progress = Math.max(0, Math.min(1, window.scrollY / totalScrollable));
       targetProgressRef.current = progress;
     };
-
     window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Zero-re-render, frame-rate independent 60/120fps loop
+  // ─── rAF render loop ──────────────────────────────────────────────────────
+  // Mobile:  Reads window.scrollY DIRECTLY each frame — ZERO interpolation lag.
+  //          The phone OS natively handles inertia/deceleration. Adding JS lerp
+  //          on top creates double-smoothing which looks like sticking.
+  // Desktop: Exact 40%-slower spring-damped wheel physics (100% untouched).
   useEffect(() => {
     let animId: number;
     let lastTime = performance.now();
@@ -497,18 +475,30 @@ export default function TopLandingScrollytelling({
       const dt = Math.min(Math.max((now - lastTime) / 16.667, 0.25), 2.5);
       lastTime = now;
 
-      const diff = targetProgressRef.current - currentProgressRef.current;
       const isMob = isMobileRef.current;
 
+      let frameIdx: number;
+
       if (isMob) {
-        // Mobile: Direct, ultra-responsive silky tracking (0.22 * dt) coupled to native iOS/Android touch inertia
-        if (Math.abs(diff) > 0.00003) {
-          currentProgressRef.current += diff * Math.min(1, 0.22 * dt);
-        } else {
-          currentProgressRef.current = targetProgressRef.current;
+        // ── MOBILE: direct scroll-position → frame mapping, zero lag ────
+        const totalScrollable = totalScrollableRef.current;
+        const rawProgress = totalScrollable > 0
+          ? Math.max(0, Math.min(1, window.scrollY / totalScrollable))
+          : 0;
+        frameIdx = Math.max(
+          1,
+          Math.min(TOTAL_FRAMES, Math.round(rawProgress * (TOTAL_FRAMES - 1)) + 1)
+        );
+
+        const shouldShowHint = rawProgress < 0.04;
+        if (shouldShowHint !== showScrollHintRef.current) {
+          showScrollHintRef.current = shouldShowHint;
+          setShowScrollHint(shouldShowHint);
         }
       } else {
-        // Desktop: Exact 40%-slower spring-damped wheel physics (100% untouched)
+        // ── DESKTOP: exact 40%-slower spring-damped wheel physics ────────
+        const diff = targetProgressRef.current - currentProgressRef.current;
+
         if (Math.abs(diff) > 0.00003 || Math.abs(velocityRef.current) > 0.00003) {
           const desiredVelocity = diff * 0.044;
           velocityRef.current +=
@@ -528,20 +518,19 @@ export default function TopLandingScrollytelling({
           currentProgressRef.current = targetProgressRef.current;
           velocityRef.current = 0;
         }
+
+        const p = currentProgressRef.current;
+        const shouldShowHint = p < 0.04;
+        if (shouldShowHint !== showScrollHintRef.current) {
+          showScrollHintRef.current = shouldShowHint;
+          setShowScrollHint(shouldShowHint);
+        }
+
+        frameIdx = Math.max(
+          1,
+          Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
+        );
       }
-
-      const p = currentProgressRef.current;
-
-      const shouldShowHint = p < 0.04;
-      if (shouldShowHint !== showScrollHintRef.current) {
-        showScrollHintRef.current = shouldShowHint;
-        setShowScrollHint(shouldShowHint);
-      }
-
-      const frameIdx = Math.max(
-        1,
-        Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
-      );
 
       drawFrame(frameIdx);
 
@@ -559,10 +548,7 @@ export default function TopLandingScrollytelling({
     };
 
     animId = requestAnimationFrame(loop);
-
-    return () => {
-      if (animId) cancelAnimationFrame(animId);
-    };
+    return () => { if (animId) cancelAnimationFrame(animId); };
   }, [drawFrame]);
 
   return (
@@ -573,18 +559,18 @@ export default function TopLandingScrollytelling({
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-svh md:h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
-        {/* Fullscreen Video Canvas: Hardware-accelerated object-cover on mobile, custom cover on desktop */}
+        {/* Fullscreen Video Canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full object-cover object-center block z-0 will-change-transform transform-gpu"
         />
 
-        {/* Subtle directional shadow gradient on left/bottom ONLY for text contrast (Zero Blur) */}
+        {/* Subtle directional shadow gradient for text contrast */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent md:bg-gradient-to-r md:from-black/65 md:via-black/15 md:to-transparent pointer-events-none z-10" />
 
-        {/* ========================================================= */}
-        {/* DESKTOP FLOATING SIDE CAPTIONS (MD & UP - No Box Bg)      */}
-        {/* ========================================================= */}
+        {/* ============================================================= */}
+        {/* DESKTOP FLOATING SIDE CAPTIONS (MD & UP)                      */}
+        {/* ============================================================= */}
         <div className="hidden md:flex relative z-20 w-full max-w-7xl mx-auto px-8 lg:px-16 h-full items-center pointer-events-none">
           <div
             key={activeScene.id}
@@ -649,9 +635,9 @@ export default function TopLandingScrollytelling({
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* MOBILE FLOATING CAPTIONS (< MD) - ZERO-REMOUNT GPU LAYER  */}
-        {/* ========================================================= */}
+        {/* ============================================================= */}
+        {/* MOBILE FLOATING CAPTIONS (< MD) — ZERO-REMOUNT GPU LAYER      */}
+        {/* ============================================================= */}
         <div className="md:hidden relative z-20 w-full h-full flex flex-col justify-end px-6 pb-24 pointer-events-none">
           <div className="pointer-events-auto text-left max-w-sm">
             {/* Scene Tag */}
