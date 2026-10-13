@@ -9,11 +9,15 @@ interface TopLandingScrollytellingProps {
 }
 
 const TOTAL_FRAMES = 290;
-// Mobile canvas matches the regenerated frame size 1:1. CSS object-cover
+// Mobile canvas matches the regenerated 540×960 frames 1:1. CSS object-cover
 // scales it on the hardware compositor — no CPU resample, no black edge
 // from mismatched crop math.
-const MOBILE_W = 720;
-const MOBILE_H = 1280;
+const MOBILE_W = 540;
+const MOBILE_H = 960;
+// Mobile ships a 145-frame set (every other source sample) so the decoded
+// working set stays ~57 MB — small enough that the browser never evicts
+// bitmaps mid-scroll, which was the cause of sync re-decode hitches.
+const MOBILE_TOTAL_FRAMES = 145;
 
 interface CaptionScene {
   id: number;
@@ -21,8 +25,11 @@ interface CaptionScene {
   timecode: string;
   title: string;
   subtitle: string;
-  frameStart: number;
-  frameEnd: number;
+  // Normalized scroll progress [0, 1], breakpoint-agnostic so captions swap
+  // at the same scroll position on both 290-frame desktop and 145-frame
+  // mobile sequences.
+  progressStart: number;
+  progressEnd: number;
 }
 
 const SCENES: CaptionScene[] = [
@@ -32,8 +39,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:00 — 00:01",
     title: "Where luxury begins.",
     subtitle: "Welcome to H&S Salon.",
-    frameStart: 1,
-    frameEnd: 30,
+    progressStart: 0,
+    progressEnd: 30 / 289,
   },
   {
     id: 2,
@@ -41,8 +48,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:01 — 00:02",
     title: "Designed for those who notice the details.",
     subtitle: "Every corner curated with intention.",
-    frameStart: 31,
-    frameEnd: 60,
+    progressStart: 30 / 289,
+    progressEnd: 60 / 289,
   },
   {
     id: 3,
@@ -50,8 +57,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:02 — 00:03",
     title: "Precision. Atmosphere. Presence.",
     subtitle: "A space that elevates every visit.",
-    frameStart: 61,
-    frameEnd: 90,
+    progressStart: 60 / 289,
+    progressEnd: 90 / 289,
   },
   {
     id: 4,
@@ -59,8 +66,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:03 — 00:05",
     title: "Craftsmanship you can feel.",
     subtitle: "Every cut. Every line. Perfected.",
-    frameStart: 91,
-    frameEnd: 145,
+    progressStart: 90 / 289,
+    progressEnd: 145 / 289,
   },
   {
     id: 5,
@@ -68,8 +75,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:05 — 00:07",
     title: "A ritual of care.",
     subtitle: "Where your hair finds its best version.",
-    frameStart: 146,
-    frameEnd: 205,
+    progressStart: 145 / 289,
+    progressEnd: 205 / 289,
   },
   {
     id: 6,
@@ -77,8 +84,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:07 — 00:08",
     title: "The tools of excellence.",
     subtitle: "Only the finest, always chosen with purpose.",
-    frameStart: 206,
-    frameEnd: 235,
+    progressStart: 205 / 289,
+    progressEnd: 235 / 289,
   },
   {
     id: 7,
@@ -86,8 +93,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:08 — 00:10",
     title: "Confidence, redefined.",
     subtitle: "This is the H&S standard.",
-    frameStart: 236,
-    frameEnd: 290,
+    progressStart: 235 / 289,
+    progressEnd: 1,
   },
 ];
 
@@ -102,13 +109,12 @@ export default function TopLandingScrollytelling({
   const [activeScene, setActiveScene] = useState<CaptionScene>(SCENES[0]);
   const [showScrollHint, setShowScrollHint] = useState(true);
 
-  // Decoded frames ready to draw (ImageBitmap on mobile, HTMLImageElement on desktop)
+  // Decoded frames ready to draw (HTMLImageElement on both breakpoints)
   const framesRef = useRef<Map<number, ImageBitmap | HTMLImageElement>>(
     new Map()
   );
   const loadedSetRef = useRef<Set<number>>(new Set());
 
-  // Mobile-only: compressed blobs + bounded decode window bookkeeping
   // Scroll state — single source of truth, read directly from DOM
   const lastDrawnFrameRef = useRef<number>(-1);
   const activeSceneIdRef = useRef<number>(1);
@@ -143,7 +149,7 @@ export default function TopLandingScrollytelling({
 
   // ─── drawFrame ────────────────────────────────────────────────────────────
   // Both paths draw an already-decoded HTMLImageElement.
-  // Mobile:  1:1 blit onto the fixed 720×1280 buffer; CSS object-cover
+  // Mobile:  1:1 blit onto the fixed 540×960 buffer; CSS object-cover
   //          scales it on the HW compositor — no CPU cost.
   // Desktop: exact cover-scaled draw into the DPR-aware canvas buffer.
   const drawFrame = useCallback((frameIdx: number, force = false) => {
@@ -271,9 +277,12 @@ export default function TopLandingScrollytelling({
             Math.min(1, scrollYRef.current / totalScrollableRef.current)
           )
         : currentProgressRef.current;
+      const frameLimit = isMobileRef.current
+        ? MOBILE_TOTAL_FRAMES
+        : TOTAL_FRAMES;
       const currentFrame = Math.max(
         1,
-        Math.min(TOTAL_FRAMES, Math.round(p * (TOTAL_FRAMES - 1)) + 1)
+        Math.min(frameLimit, Math.round(p * (frameLimit - 1)) + 1)
       );
       drawFrame(currentFrame, true);
     },
@@ -284,10 +293,12 @@ export default function TopLandingScrollytelling({
   // Identical for mobile and desktop: HTMLImageElement + img.decode().
   // The browser owns the decode cache and LRU-evicts it internally — far more
   // reliable than a hand-rolled ImageBitmap window that falls behind on flings.
-  // Only the frame URL differs per breakpoint.
+  // Mobile warms the first 24 frames sequentially so the opening scroll never
+  // waits on an empty cache, then falls into the shared stride queue.
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
+    const totalFrames = isMobile ? MOBILE_TOTAL_FRAMES : TOTAL_FRAMES;
     let isCancelled = false;
 
     const loadingSet = new Set<number>();
@@ -296,7 +307,7 @@ export default function TopLandingScrollytelling({
       if (
         isCancelled ||
         idx < 1 ||
-        idx > TOTAL_FRAMES ||
+        idx > totalFrames ||
         loadedSetRef.current.has(idx) ||
         loadingSet.has(idx)
       ) {
@@ -341,12 +352,18 @@ export default function TopLandingScrollytelling({
     };
 
     const runPreloadPipeline = async () => {
-      await loadAndDecodeFrame(1);
+      // Warm-up: sequential first frames so early scroll never stalls.
+      const WARMUP = isMobile ? 24 : 1;
+      for (let i = 1; i <= WARMUP; i++) {
+        await loadAndDecodeFrame(i);
+        if (isCancelled) return;
+      }
 
-      const queuedSet = new Set<number>([1]);
+      const queuedSet = new Set<number>();
+      for (let i = 1; i <= WARMUP; i++) queuedSet.add(i);
       const queue: number[] = [];
       for (const stride of [4, 2, 1]) {
-        for (let i = 2; i <= TOTAL_FRAMES; i += stride) {
+        for (let i = WARMUP + 1; i <= totalFrames; i += stride) {
           if (!queuedSet.has(i)) {
             queuedSet.add(i);
             queue.push(i);
@@ -367,8 +384,8 @@ export default function TopLandingScrollytelling({
         const curr = Math.max(
           1,
           Math.min(
-            TOTAL_FRAMES,
-            Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1
+            totalFrames,
+            Math.round(scrollProgress * (totalFrames - 1)) + 1
           )
         );
 
@@ -376,7 +393,7 @@ export default function TopLandingScrollytelling({
           const t = curr + offset;
           if (
             t >= 1 &&
-            t <= TOTAL_FRAMES &&
+            t <= totalFrames &&
             !loadedSetRef.current.has(t) &&
             !loadingSet.has(t)
           ) {
@@ -420,8 +437,8 @@ export default function TopLandingScrollytelling({
         const exactFrame = Math.max(
           1,
           Math.min(
-            TOTAL_FRAMES,
-            Math.round(scrollProgress * (TOTAL_FRAMES - 1)) + 1
+            totalFrames,
+            Math.round(scrollProgress * (totalFrames - 1)) + 1
           )
         );
         drawFrame(exactFrame, true);
@@ -509,8 +526,8 @@ export default function TopLandingScrollytelling({
         frameIdx = Math.max(
           1,
           Math.min(
-            TOTAL_FRAMES,
-            Math.round(rawProgress * (TOTAL_FRAMES - 1)) + 1
+            MOBILE_TOTAL_FRAMES,
+            Math.round(rawProgress * (MOBILE_TOTAL_FRAMES - 1)) + 1
           )
         );
 
@@ -561,8 +578,23 @@ export default function TopLandingScrollytelling({
       currentFrameRef.current = frameIdx;
       drawFrame(frameIdx);
 
+      // Caption matching uses scroll progress (breakpoint-agnostic) rather
+      // than frame indices, so 145-frame mobile and 290-frame desktop swap
+      // captions at identical scroll positions.
+      const matchProgress = isMob
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              scrollYRef.current / Math.max(1, totalScrollableRef.current)
+            )
+          )
+        : currentProgressRef.current;
       for (const scene of SCENES) {
-        if (frameIdx >= scene.frameStart && frameIdx <= scene.frameEnd) {
+        if (
+          matchProgress >= scene.progressStart &&
+          matchProgress <= scene.progressEnd
+        ) {
           if (activeSceneIdRef.current !== scene.id) {
             activeSceneIdRef.current = scene.id;
             setActiveScene(scene);
