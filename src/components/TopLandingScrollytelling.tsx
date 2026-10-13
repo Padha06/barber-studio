@@ -19,6 +19,11 @@ const MOBILE_H = 960;
 // working set stays ~57 MB — small enough that the browser never evicts
 // bitmaps mid-scroll, which was the cause of sync re-decode hitches.
 const MOBILE_TOTAL_FRAMES = 145;
+// Mobile releases the loading overlay once this many leading frames are
+// settled — enough to scroll smoothly from Scene 1 through the end of
+// Scene 2 (frame ~31) with margin. The remaining frames keep loading in
+// the background so the user is never blocked on the full 145.
+const MOBILE_CRITICAL_FRAMES = 40;
 
 interface CaptionScene {
   id: number;
@@ -296,12 +301,18 @@ export default function TopLandingScrollytelling({
   // Identical for mobile and desktop: HTMLImageElement + img.decode().
   // The browser owns the decode cache and LRU-evicts it internally — far more
   // reliable than a hand-rolled ImageBitmap window that falls behind on flings.
-  // Mobile warms the first 24 frames sequentially so the opening scroll never
-  // waits on an empty cache, then falls into the shared stride queue.
+  // Mobile warms the first MOBILE_CRITICAL_FRAMES frames sequentially so the
+  // opening scroll (Scene 1 → end of Scene 2) never stalls, then falls into
+  // the shared stride queue for the rest, which keeps loading in the background.
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
     const totalFrames = isMobile ? MOBILE_TOTAL_FRAMES : TOTAL_FRAMES;
+    // On mobile, the overlay only tracks the leading critical frames (enough
+    // for a smooth Scene 1 → Scene 2 scroll). The rest stream in behind it.
+    const progressDenominator = isMobile
+      ? Math.min(MOBILE_CRITICAL_FRAMES, totalFrames)
+      : totalFrames;
     let isCancelled = false;
 
     const loadingSet = new Set<number>();
@@ -309,14 +320,16 @@ export default function TopLandingScrollytelling({
     // marked settled so getNextFrameToLoad never retries them forever.
     const settledSet = new Set<number>(loadedSetRef.current);
     let lastReportedPercent = Math.floor(
-      (settledSet.size / totalFrames) * 100
+      (settledSet.size / progressDenominator) * 100
     );
     const reportProgress = () => {
       if (isCancelled) return;
-      const pct = Math.floor((settledSet.size / totalFrames) * 100);
+      const pct = Math.floor((settledSet.size / progressDenominator) * 100);
       if (pct !== lastReportedPercent) {
         lastReportedPercent = pct;
-        setPreloadProgress(Math.min(1, settledSet.size / totalFrames));
+        setPreloadProgress(
+          Math.min(1, settledSet.size / progressDenominator)
+        );
       }
     };
     reportProgress();
@@ -381,10 +394,30 @@ export default function TopLandingScrollytelling({
     };
 
     const runPreloadPipeline = async () => {
-      // Warm-up: sequential first frames so early scroll never stalls.
-      const WARMUP = isMobile ? 24 : 1;
-      for (let i = 1; i <= WARMUP; i++) {
-        await loadAndDecodeFrame(i);
+      // Warm-up: load the leading frames that guarantee a smooth opening
+      // scroll. Mobile needs MOBILE_CRITICAL_FRAMES (Scene 1 → end of
+      // Scene 2, ~frame 31, with margin); desktop keeps its original
+      // single-frame warm-up.
+      const WARMUP = isMobile ? progressDenominator : 1;
+      if (isMobile) {
+        const WARMUP_CONCURRENCY = 4;
+        for (let start = 1; start <= WARMUP; start += WARMUP_CONCURRENCY) {
+          const end = Math.min(start + WARMUP_CONCURRENCY - 1, WARMUP);
+          const batch: number[] = [];
+          for (let i = start; i <= end; i++) batch.push(i);
+          await Promise.all(batch.map((i) => loadAndDecodeFrame(i)));
+          if (isCancelled) return;
+        }
+        // Critical frames are settled — release the overlay now so the
+        // user can start scrolling. The remaining frames keep streaming
+        // in via the stride queue below.
+        setPreloadProgress(1);
+        const MIN_OVERLAY_MS = 700;
+        setTimeout(() => {
+          if (!isCancelled) setPreloadFinished(true);
+        }, MIN_OVERLAY_MS);
+      } else {
+        await loadAndDecodeFrame(1);
         if (isCancelled) return;
       }
 
@@ -469,14 +502,15 @@ export default function TopLandingScrollytelling({
         );
         drawFrame(exactFrame, true);
 
-        // Dismiss the loading overlay once every frame is settled.
-        // Hold for a minimum display time so a fast connection doesn't
-        // flash a near-instant overlay.
-        setPreloadProgress(1);
-        const MIN_OVERLAY_MS = 700;
-        setTimeout(() => {
-          if (!isCancelled) setPreloadFinished(true);
-        }, MIN_OVERLAY_MS);
+        // Desktop dismisses only after every frame is settled (mobile
+        // already released the overlay after its critical warm-up).
+        if (!isMobile) {
+          setPreloadProgress(1);
+          const MIN_OVERLAY_MS = 700;
+          setTimeout(() => {
+            if (!isCancelled) setPreloadFinished(true);
+          }, MIN_OVERLAY_MS);
+        }
       }
     };
 
