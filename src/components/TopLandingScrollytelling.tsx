@@ -19,11 +19,6 @@ const MOBILE_H = 960;
 // working set stays ~57 MB — small enough that the browser never evicts
 // bitmaps mid-scroll, which was the cause of sync re-decode hitches.
 const MOBILE_TOTAL_FRAMES = 145;
-// Mobile releases the loading overlay once this many leading frames are
-// settled — enough to scroll smoothly from Scene 1 through the end of
-// Scene 2 (frame ~31) with margin. The remaining frames keep loading in
-// the background so the user is never blocked on the full 145.
-const MOBILE_CRITICAL_FRAMES = 40;
 
 interface CaptionScene {
   id: number;
@@ -308,11 +303,7 @@ export default function TopLandingScrollytelling({
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
     const totalFrames = isMobile ? MOBILE_TOTAL_FRAMES : TOTAL_FRAMES;
-    // On mobile, the overlay only tracks the leading critical frames (enough
-    // for a smooth Scene 1 → Scene 2 scroll). The rest stream in behind it.
-    const progressDenominator = isMobile
-      ? Math.min(MOBILE_CRITICAL_FRAMES, totalFrames)
-      : totalFrames;
+    const progressDenominator = totalFrames;
     let isCancelled = false;
 
     const loadingSet = new Set<number>();
@@ -394,38 +385,14 @@ export default function TopLandingScrollytelling({
     };
 
     const runPreloadPipeline = async () => {
-      // Warm-up: load the leading frames that guarantee a smooth opening
-      // scroll. Mobile needs MOBILE_CRITICAL_FRAMES (Scene 1 → end of
-      // Scene 2, ~frame 31, with margin); desktop keeps its original
-      // single-frame warm-up.
-      const WARMUP = isMobile ? progressDenominator : 1;
-      if (isMobile) {
-        const WARMUP_CONCURRENCY = 4;
-        for (let start = 1; start <= WARMUP; start += WARMUP_CONCURRENCY) {
-          const end = Math.min(start + WARMUP_CONCURRENCY - 1, WARMUP);
-          const batch: number[] = [];
-          for (let i = start; i <= end; i++) batch.push(i);
-          await Promise.all(batch.map((i) => loadAndDecodeFrame(i)));
-          if (isCancelled) return;
-        }
-        // Critical frames are settled — release the overlay now so the
-        // user can start scrolling. The remaining frames keep streaming
-        // in via the stride queue below.
-        setPreloadProgress(1);
-        const MIN_OVERLAY_MS = 700;
-        setTimeout(() => {
-          if (!isCancelled) setPreloadFinished(true);
-        }, MIN_OVERLAY_MS);
-      } else {
-        await loadAndDecodeFrame(1);
-        if (isCancelled) return;
-      }
+      // Warm up frame 1 immediately for instant display
+      await loadAndDecodeFrame(1);
+      if (isCancelled) return;
 
-      const queuedSet = new Set<number>();
-      for (let i = 1; i <= WARMUP; i++) queuedSet.add(i);
+      const queuedSet = new Set<number>([1]);
       const queue: number[] = [];
       for (const stride of [4, 2, 1]) {
-        for (let i = WARMUP + 1; i <= totalFrames; i += stride) {
+        for (let i = 2; i <= totalFrames; i += stride) {
           if (!queuedSet.has(i)) {
             queuedSet.add(i);
             queue.push(i);
@@ -502,15 +469,11 @@ export default function TopLandingScrollytelling({
         );
         drawFrame(exactFrame, true);
 
-        // Desktop dismisses only after every frame is settled (mobile
-        // already released the overlay after its critical warm-up).
-        if (!isMobile) {
-          setPreloadProgress(1);
-          const MIN_OVERLAY_MS = 700;
-          setTimeout(() => {
-            if (!isCancelled) setPreloadFinished(true);
-          }, MIN_OVERLAY_MS);
-        }
+        setPreloadProgress(1);
+        const MIN_OVERLAY_MS = 600;
+        setTimeout(() => {
+          if (!isCancelled) setPreloadFinished(true);
+        }, MIN_OVERLAY_MS);
       }
     };
 
@@ -555,14 +518,12 @@ export default function TopLandingScrollytelling({
       ticking = false;
       const y = window.scrollY;
       scrollYRef.current = y;
-      if (!isMobileRef.current) {
-        const totalScrollable = totalScrollableRef.current;
-        if (totalScrollable > 0) {
-          targetProgressRef.current = Math.max(
-            0,
-            Math.min(1, y / totalScrollable)
-          );
-        }
+      const totalScrollable = totalScrollableRef.current;
+      if (totalScrollable > 0) {
+        targetProgressRef.current = Math.max(
+          0,
+          Math.min(1, y / totalScrollable)
+        );
       }
     };
     const onScroll = () => {
@@ -576,10 +537,9 @@ export default function TopLandingScrollytelling({
   }, []);
 
   // ─── rAF render loop (paused while the hero is off-screen) ────────────────
-  // Mobile:  direct scroll-position → frame mapping, zero lag, zero smoothing.
-  //          The exact frame is requested the instant it is needed so settling
-  //          is immediate; the OS handles inertia natively.
-  // Desktop: exact 40%-slower spring-damped wheel physics (unchanged).
+  // Mobile:  responsive touch-momentum smoothing (0.35 * dt) — glides seamlessly
+  //          across every frame at 60/120fps with zero perceived lag.
+  // Desktop: exact 40%-slower spring-damped wheel physics (100% untouched).
   useEffect(() => {
     let animId = 0;
     let running = false;
@@ -593,30 +553,27 @@ export default function TopLandingScrollytelling({
       let frameIdx: number;
 
       if (isMob) {
-        const y = scrollYRef.current;
-        const dy = y - lastScrollYRef.current;
-        lastScrollYRef.current = y;
-        if (dy > 1) scrollDirRef.current = 1;
-        else if (dy < -1) scrollDirRef.current = -1;
+        const diff = targetProgressRef.current - currentProgressRef.current;
+        if (Math.abs(diff) > 0.0001) {
+          currentProgressRef.current += diff * Math.min(1, 0.35 * dt);
+        } else {
+          currentProgressRef.current = targetProgressRef.current;
+        }
 
-        const totalScrollable = totalScrollableRef.current;
-        const rawProgress =
-          totalScrollable > 0
-            ? Math.max(0, Math.min(1, y / totalScrollable))
-            : 0;
-        frameIdx = Math.max(
-          1,
-          Math.min(
-            MOBILE_TOTAL_FRAMES,
-            Math.round(rawProgress * (MOBILE_TOTAL_FRAMES - 1)) + 1
-          )
-        );
-
-        const shouldShowHint = rawProgress < 0.04;
+        const p = currentProgressRef.current;
+        const shouldShowHint = p < 0.04;
         if (shouldShowHint !== showScrollHintRef.current) {
           showScrollHintRef.current = shouldShowHint;
           setShowScrollHint(shouldShowHint);
         }
+
+        frameIdx = Math.max(
+          1,
+          Math.min(
+            MOBILE_TOTAL_FRAMES,
+            Math.round(p * (MOBILE_TOTAL_FRAMES - 1)) + 1
+          )
+        );
       } else {
         const diff = targetProgressRef.current - currentProgressRef.current;
 
@@ -659,18 +616,8 @@ export default function TopLandingScrollytelling({
       currentFrameRef.current = frameIdx;
       drawFrame(frameIdx);
 
-      // Caption matching uses scroll progress (breakpoint-agnostic) rather
-      // than frame indices, so 145-frame mobile and 290-frame desktop swap
-      // captions at identical scroll positions.
-      const matchProgress = isMob
-        ? Math.max(
-            0,
-            Math.min(
-              1,
-              scrollYRef.current / Math.max(1, totalScrollableRef.current)
-            )
-          )
-        : currentProgressRef.current;
+      // Caption matching uses smooth scroll progress (breakpoint-agnostic)
+      const matchProgress = currentProgressRef.current;
       for (const scene of SCENES) {
         if (
           matchProgress >= scene.progressStart &&
