@@ -339,6 +339,32 @@ export default function TopLandingScrollytelling({
       loadingSet.add(idx);
       const url = getFrameUrl(idx, isMobile);
 
+      // On mobile, decode off-main-thread via createImageBitmap into GPU VRAM
+      if (isMobile && typeof window.createImageBitmap === "function") {
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          if (isCancelled) return;
+          const bitmap = await createImageBitmap(blob);
+          if (isCancelled) {
+            bitmap.close();
+            return;
+          }
+          framesRef.current.set(idx, bitmap);
+          loadedSetRef.current.add(idx);
+          settledSet.add(idx);
+          reportProgress();
+          if (idx === 1) {
+            handleResize(true);
+            drawFrame(1, true);
+          }
+          loadingSet.delete(idx);
+          return;
+        } catch {
+          // Fall through to HTMLImageElement on error
+        }
+      }
+
       await new Promise<void>((resolve) => {
         const img = new Image();
         img.decoding = "async";
@@ -559,12 +585,12 @@ export default function TopLandingScrollytelling({
           Math.abs(diff) > 0.00003 ||
           Math.abs(mobileVelocityRef.current) > 0.00003
         ) {
-          // Touch spring physics: responsive acceleration with silky momentum carry-through
-          const desiredVelocity = diff * 0.095;
+          // Touch spring physics: snappy finger tracking with silky momentum carry-through
+          const desiredVelocity = diff * 0.18;
           mobileVelocityRef.current +=
-            (desiredVelocity - mobileVelocityRef.current) * Math.min(1, 0.32 * dt);
+            (desiredVelocity - mobileVelocityRef.current) * Math.min(1, 0.45 * dt);
 
-          const maxVelocity = 0.012;
+          const maxVelocity = 0.040;
           const clampedVel = Math.max(
             -maxVelocity,
             Math.min(maxVelocity, mobileVelocityRef.current)
