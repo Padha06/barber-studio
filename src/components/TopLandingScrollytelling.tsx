@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, Sparkles } from "lucide-react";
 
 interface TopLandingScrollytellingProps {
@@ -108,6 +109,8 @@ export default function TopLandingScrollytelling({
 
   const [activeScene, setActiveScene] = useState<CaptionScene>(SCENES[0]);
   const [showScrollHint, setShowScrollHint] = useState(true);
+  const [preloadProgress, setPreloadProgress] = useState(0);
+  const [preloadFinished, setPreloadFinished] = useState(false);
 
   // Decoded frames ready to draw (HTMLImageElement on both breakpoints)
   const framesRef = useRef<Map<number, ImageBitmap | HTMLImageElement>>(
@@ -302,13 +305,28 @@ export default function TopLandingScrollytelling({
     let isCancelled = false;
 
     const loadingSet = new Set<number>();
+    // Frames that are settled (loaded OR failed). Failed frames must be
+    // marked settled so getNextFrameToLoad never retries them forever.
+    const settledSet = new Set<number>(loadedSetRef.current);
+    let lastReportedPercent = Math.floor(
+      (settledSet.size / totalFrames) * 100
+    );
+    const reportProgress = () => {
+      if (isCancelled) return;
+      const pct = Math.floor((settledSet.size / totalFrames) * 100);
+      if (pct !== lastReportedPercent) {
+        lastReportedPercent = pct;
+        setPreloadProgress(Math.min(1, settledSet.size / totalFrames));
+      }
+    };
+    reportProgress();
 
     const loadAndDecodeFrame = async (idx: number): Promise<void> => {
       if (
         isCancelled ||
         idx < 1 ||
         idx > totalFrames ||
-        loadedSetRef.current.has(idx) ||
+        settledSet.has(idx) ||
         loadingSet.has(idx)
       ) {
         return;
@@ -329,9 +347,20 @@ export default function TopLandingScrollytelling({
           }
           framesRef.current.set(idx, img);
           loadedSetRef.current.add(idx);
+          settledSet.add(idx);
+          reportProgress();
           if (idx === 1) {
             handleResize(true);
             drawFrame(1, true);
+          }
+          resolve();
+        };
+
+        const fail = () => {
+          loadingSet.delete(idx);
+          if (!isCancelled) {
+            settledSet.add(idx);
+            reportProgress();
           }
           resolve();
         };
@@ -341,11 +370,11 @@ export default function TopLandingScrollytelling({
             .then(finalize)
             .catch(() => {
               img.onload = finalize;
-              img.onerror = () => resolve();
+              img.onerror = fail;
             });
         } else {
           img.onload = finalize;
-          img.onerror = () => resolve();
+          img.onerror = fail;
         }
       });
       loadingSet.delete(idx);
@@ -394,7 +423,7 @@ export default function TopLandingScrollytelling({
           if (
             t >= 1 &&
             t <= totalFrames &&
-            !loadedSetRef.current.has(t) &&
+            !settledSet.has(t) &&
             !loadingSet.has(t)
           ) {
             return t;
@@ -403,10 +432,7 @@ export default function TopLandingScrollytelling({
 
         while (cursor < queue.length) {
           const candidate = queue[cursor++];
-          if (
-            !loadedSetRef.current.has(candidate) &&
-            !loadingSet.has(candidate)
-          ) {
+          if (!settledSet.has(candidate) && !loadingSet.has(candidate)) {
             return candidate;
           }
         }
@@ -442,6 +468,15 @@ export default function TopLandingScrollytelling({
           )
         );
         drawFrame(exactFrame, true);
+
+        // Dismiss the loading overlay once every frame is settled.
+        // Hold for a minimum display time so a fast connection doesn't
+        // flash a near-instant overlay.
+        setPreloadProgress(1);
+        const MIN_OVERLAY_MS = 700;
+        setTimeout(() => {
+          if (!isCancelled) setPreloadFinished(true);
+        }, MIN_OVERLAY_MS);
       }
     };
 
@@ -450,6 +485,18 @@ export default function TopLandingScrollytelling({
       isCancelled = true;
     };
   }, [handleResize, drawFrame, getFrameUrl]);
+
+  // Lock body scroll while the loading overlay is visible.
+  useEffect(() => {
+    if (preloadFinished) {
+      document.body.style.overflow = "";
+      return;
+    }
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [preloadFinished]);
 
   // ─── Resize / orientation listener ───────────────────────────────────────
   useEffect(() => {
@@ -638,6 +685,51 @@ export default function TopLandingScrollytelling({
   }, [drawFrame]);
 
   return (
+    <>
+      {/* Loading overlay — holds until every hero frame is settled. */}
+      <AnimatePresence>
+        {!preloadFinished && (
+          <motion.div
+            key="hero-loader"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="fixed inset-0 z-[100] bg-[#0B1510] flex flex-col items-center justify-center select-none"
+          >
+            {/* Brand mark */}
+            <div
+              style={{ fontFamily: "var(--font-serif)" }}
+              className="text-5xl font-bold text-white tracking-tight mb-1"
+            >
+              H<span className="text-[#D4B26A]">&amp;</span>S
+            </div>
+            <div className="text-[10px] font-mono font-semibold tracking-[0.45em] text-[#D4B26A] uppercase mb-10">
+              Salon
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-56">
+              <div className="flex justify-between text-[10px] font-mono tracking-[0.25em] text-[#D4B26A]/80 mb-2">
+                <span>LOADING</span>
+                <span className="tabular-nums">
+                  {Math.round(preloadProgress * 100)}%
+                </span>
+              </div>
+              <div className="h-[2px] w-full bg-white/10 overflow-hidden rounded-full">
+                <div
+                  className="h-full bg-[#D4B26A] rounded-full transition-[width] duration-300 ease-out"
+                  style={{ width: `${preloadProgress * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <p className="mt-6 text-[9px] font-mono tracking-[0.3em] text-white/40 uppercase">
+              Preparing your experience
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     <div
       ref={containerRef}
       id="hero"
@@ -815,5 +907,6 @@ export default function TopLandingScrollytelling({
         </div>
       </div>
     </div>
+    </>
   );
 }
