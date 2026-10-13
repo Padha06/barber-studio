@@ -9,19 +9,11 @@ interface TopLandingScrollytellingProps {
 }
 
 const TOTAL_FRAMES = 290;
-// Small working buffer: 480×854 (~1.6 MB decoded) keeps per-frame
-// decode + GPU upload fast enough for 60fps scrubbing on mid phones.
-const MOBILE_W = 480;
-const MOBILE_H = 854;
-
-// ── Mobile memory budget ───────────────────────────────────────────────────
-// Only a sliding window of decoded frames is kept resident (~115 MB max).
-// Compressed blobs for all frames (~5.5 MB) stay cached for instant decode.
-const MOBILE_WINDOW = 30;
-const MOBILE_MAX_DECODED = 72;
-const MOBILE_EVICT_RADIUS = 34;
-const MOBILE_BLOB_CONCURRENCY = 8;
-const MOBILE_MAX_INFLIGHT = 8;
+// Mobile canvas matches the regenerated frame size 1:1. CSS object-cover
+// scales it on the hardware compositor — no CPU resample, no black edge
+// from mismatched crop math.
+const MOBILE_W = 720;
+const MOBILE_H = 1280;
 
 interface CaptionScene {
   id: number;
@@ -117,12 +109,6 @@ export default function TopLandingScrollytelling({
   const loadedSetRef = useRef<Set<number>>(new Set());
 
   // Mobile-only: compressed blobs + bounded decode window bookkeeping
-  const blobCacheRef = useRef<Map<number, Blob>>(new Map());
-  const blobPromiseRef = useRef<Map<number, Promise<Blob | null>>>(new Map());
-  const decodingRef = useRef<Set<number>>(new Set());
-  const decodedUsageRef = useRef<Map<number, number>>(new Map());
-  const usageTickRef = useRef(0);
-
   // Scroll state — single source of truth, read directly from DOM
   const lastDrawnFrameRef = useRef<number>(-1);
   const activeSceneIdRef = useRef<number>(1);
@@ -155,114 +141,10 @@ export default function TopLandingScrollytelling({
       : `/frames/frame-${padded}.webp`;
   }, []);
 
-  // ─── Mobile decode helpers ────────────────────────────────────────────────
-  const getBlob = useCallback(
-    (idx: number): Promise<Blob | null> => {
-      const cached = blobCacheRef.current.get(idx);
-      if (cached) return Promise.resolve(cached);
-      const pending = blobPromiseRef.current.get(idx);
-      if (pending) return pending;
-
-      const p = fetch(getFrameUrl(idx, true))
-        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("http"))))
-        .then((blob) => {
-          blobCacheRef.current.set(idx, blob);
-          return blob;
-        })
-        .catch(() => null)
-        .finally(() => {
-          blobPromiseRef.current.delete(idx);
-        });
-
-      blobPromiseRef.current.set(idx, p);
-      return p;
-    },
-    [getFrameUrl]
-  );
-
-  const touchFrame = useCallback((idx: number) => {
-    decodedUsageRef.current.set(idx, ++usageTickRef.current);
-  }, []);
-
-  const evictIfNeeded = useCallback((center: number) => {
-    const frames = framesRef.current;
-    if (frames.size <= MOBILE_MAX_DECODED) return;
-
-    const evictable: number[] = [];
-    for (const idx of frames.keys()) {
-      if (Math.abs(idx - center) > MOBILE_EVICT_RADIUS) evictable.push(idx);
-    }
-    evictable.sort(
-      (a, b) =>
-        (decodedUsageRef.current.get(a) ?? 0) -
-        (decodedUsageRef.current.get(b) ?? 0)
-    );
-
-    let need = frames.size - MOBILE_MAX_DECODED;
-    for (const idx of evictable) {
-      if (need <= 0) break;
-      const value = frames.get(idx);
-      if (value instanceof ImageBitmap) value.close();
-      frames.delete(idx);
-      loadedSetRef.current.delete(idx);
-      decodedUsageRef.current.delete(idx);
-      need--;
-    }
-  }, []);
-
-  const decodeFrame = useCallback(
-    (idx: number): Promise<void> => {
-      if (idx < 1 || idx > TOTAL_FRAMES) return Promise.resolve();
-      if (framesRef.current.has(idx) || decodingRef.current.has(idx)) {
-        touchFrame(idx);
-        return Promise.resolve();
-      }
-      decodingRef.current.add(idx);
-
-      const store = (value: ImageBitmap | HTMLImageElement) => {
-        if (framesRef.current.has(idx)) {
-          if (value instanceof ImageBitmap) value.close();
-          return;
-        }
-        framesRef.current.set(idx, value);
-        loadedSetRef.current.add(idx);
-        touchFrame(idx);
-        evictIfNeeded(currentFrameRef.current);
-      };
-
-      return getBlob(idx)
-        .then((blob) => {
-          if (!blob) return;
-          if (typeof createImageBitmap === "function") {
-            return createImageBitmap(blob).then(store);
-          }
-          return new Promise<void>((resolve) => {
-            const url = URL.createObjectURL(blob);
-            const img = new Image();
-            img.decoding = "async";
-            img.onload = () => {
-              URL.revokeObjectURL(url);
-              store(img);
-              resolve();
-            };
-            img.onerror = () => {
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            img.src = url;
-          });
-        })
-        .catch(() => {})
-        .finally(() => {
-          decodingRef.current.delete(idx);
-        }) as Promise<void>;
-    },
-    [getBlob, touchFrame, evictIfNeeded]
-  );
-
   // ─── drawFrame ────────────────────────────────────────────────────────────
-  // Mobile:  1:1 unscaled GPU blit onto the fixed 480×854 buffer.
-  //          CSS object-cover scales it on the HW compositor — no CPU cost.
+  // Both paths draw an already-decoded HTMLImageElement.
+  // Mobile:  1:1 blit onto the fixed 720×1280 buffer; CSS object-cover
+  //          scales it on the HW compositor — no CPU cost.
   // Desktop: exact cover-scaled draw into the DPR-aware canvas buffer.
   const drawFrame = useCallback((frameIdx: number, force = false) => {
     const isMob = isMobileRef.current;
@@ -399,41 +281,15 @@ export default function TopLandingScrollytelling({
   );
 
   // ─── Frame preload pipeline ───────────────────────────────────────────────
+  // Identical for mobile and desktop: HTMLImageElement + img.decode().
+  // The browser owns the decode cache and LRU-evicts it internally — far more
+  // reliable than a hand-rolled ImageBitmap window that falls behind on flings.
+  // Only the frame URL differs per breakpoint.
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
     let isCancelled = false;
 
-    if (isMobile) {
-      // Mobile: decode frame 1 for instant paint, then stream compressed
-      // frames into the blob cache. Decoding is driven by the window manager.
-      decodeFrame(1).then(() => {
-        if (isCancelled) return;
-        handleResize(true);
-        drawFrame(1, true);
-      });
-
-      const prefetchBlobs = async () => {
-        let cursor = 1;
-        const worker = async () => {
-          while (!isCancelled) {
-            const idx = cursor++;
-            if (idx > TOTAL_FRAMES) break;
-            await getBlob(idx);
-          }
-        };
-        await Promise.all(
-          Array.from({ length: MOBILE_BLOB_CONCURRENCY }, () => worker())
-        );
-      };
-      void prefetchBlobs();
-
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    // ── Desktop strategy (unchanged): stride 4 → 2 → 1 as HTMLImageElement ──
     const loadingSet = new Set<number>();
 
     const loadAndDecodeFrame = async (idx: number): Promise<void> => {
@@ -447,7 +303,7 @@ export default function TopLandingScrollytelling({
         return;
       }
       loadingSet.add(idx);
-      const url = getFrameUrl(idx, false);
+      const url = getFrameUrl(idx, isMobile);
 
       await new Promise<void>((resolve) => {
         const img = new Image();
@@ -576,55 +432,7 @@ export default function TopLandingScrollytelling({
     return () => {
       isCancelled = true;
     };
-  }, [decodeFrame, getBlob, handleResize, drawFrame, getFrameUrl]);
-
-  // ─── Mobile sliding-window decoder ────────────────────────────────────────
-  // Bounded sharp window around the current frame; decoding is prioritised
-  // along the scroll direction so a fast fling never outruns it.
-  useEffect(() => {
-    const topUp = () => {
-      if (!isMobileRef.current || !visibleRef.current) return;
-      const center = currentFrameRef.current;
-      const dir = scrollDirRef.current >= 0 ? 1 : -1;
-      const lo = Math.max(1, center - MOBILE_WINDOW);
-      const hi = Math.min(TOTAL_FRAMES, center + MOBILE_WINDOW);
-
-      const order: number[] = [];
-      for (let d = 0; d <= MOBILE_WINDOW; d++) {
-        const ahead = center + d * dir;
-        const behind = center - d * dir;
-        if (ahead >= lo && ahead <= hi) order.push(ahead);
-        if (d !== 0 && behind >= lo && behind <= hi) order.push(behind);
-      }
-
-      let missingNear = 0;
-      for (const idx of order) {
-        if (!framesRef.current.has(idx) && !decodingRef.current.has(idx)) {
-          missingNear++;
-          if (missingNear >= 24) break;
-        }
-      }
-      const batchSize =
-        missingNear >= 20 ? 10 : missingNear >= 8 ? 6 : 3;
-
-      let inflight = decodingRef.current.size;
-      let dispatched = 0;
-      for (const idx of order) {
-        if (dispatched >= batchSize || inflight >= MOBILE_MAX_INFLIGHT) break;
-        if (framesRef.current.has(idx)) continue;
-        if (decodingRef.current.has(idx)) continue;
-        void decodeFrame(idx);
-        inflight++;
-        dispatched++;
-      }
-
-      evictIfNeeded(center);
-    };
-
-    const timer = setInterval(topUp, 50);
-    topUp();
-    return () => clearInterval(timer);
-  }, [decodeFrame, evictIfNeeded]);
+  }, [handleResize, drawFrame, getFrameUrl]);
 
   // ─── Resize / orientation listener ───────────────────────────────────────
   useEffect(() => {
@@ -705,14 +513,6 @@ export default function TopLandingScrollytelling({
             Math.round(rawProgress * (TOTAL_FRAMES - 1)) + 1
           )
         );
-
-        // Settle fast: kick off the exact frame immediately if missing.
-        if (
-          !framesRef.current.has(frameIdx) &&
-          !decodingRef.current.has(frameIdx)
-        ) {
-          void decodeFrame(frameIdx);
-        }
 
         const shouldShowHint = rawProgress < 0.04;
         if (shouldShowHint !== showScrollHintRef.current) {
@@ -803,7 +603,7 @@ export default function TopLandingScrollytelling({
       stop();
       observer.disconnect();
     };
-  }, [drawFrame, decodeFrame]);
+  }, [drawFrame]);
 
   return (
     <div
