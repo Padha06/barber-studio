@@ -9,7 +9,7 @@ interface TopLandingScrollytellingProps {
   onExploreServices: () => void;
 }
 
-const TOTAL_FRAMES = 290;
+const TOTAL_FRAMES = 337;
 // Mobile canvas matches the regenerated 540×960 frames 1:1. CSS object-cover
 // scales it on the hardware compositor — no CPU resample, no black edge
 // from mismatched crop math.
@@ -26,8 +26,7 @@ interface CaptionScene {
   title: string;
   subtitle: string;
   // Normalized scroll progress [0, 1], breakpoint-agnostic so captions swap
-  // at the same scroll position on both 290-frame desktop and 180-frame
-  // mobile sequences.
+  // at the same scroll position on both desktop and mobile sequences.
   progressStart: number;
   progressEnd: number;
 }
@@ -40,7 +39,7 @@ const SCENES: CaptionScene[] = [
     title: "Where luxury begins.",
     subtitle: "Welcome to H&S Salon.",
     progressStart: 0,
-    progressEnd: 30 / 289,
+    progressEnd: 47 / 336,
   },
   {
     id: 2,
@@ -48,8 +47,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:01 — 00:02",
     title: "Designed for those who notice the details.",
     subtitle: "Every corner curated with intention.",
-    progressStart: 30 / 289,
-    progressEnd: 60 / 289,
+    progressStart: 47 / 336,
+    progressEnd: 77 / 336,
   },
   {
     id: 3,
@@ -57,8 +56,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:02 — 00:03",
     title: "Precision. Atmosphere. Presence.",
     subtitle: "A space that elevates every visit.",
-    progressStart: 60 / 289,
-    progressEnd: 90 / 289,
+    progressStart: 77 / 336,
+    progressEnd: 107 / 336,
   },
   {
     id: 4,
@@ -66,8 +65,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:03 — 00:05",
     title: "Craftsmanship you can feel.",
     subtitle: "Every cut. Every line. Perfected.",
-    progressStart: 90 / 289,
-    progressEnd: 145 / 289,
+    progressStart: 107 / 336,
+    progressEnd: 172 / 336,
   },
   {
     id: 5,
@@ -75,8 +74,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:05 — 00:07",
     title: "A ritual of care.",
     subtitle: "Where your hair finds its best version.",
-    progressStart: 145 / 289,
-    progressEnd: 205 / 289,
+    progressStart: 172 / 336,
+    progressEnd: 242 / 336,
   },
   {
     id: 6,
@@ -84,8 +83,8 @@ const SCENES: CaptionScene[] = [
     timecode: "00:07 — 00:08",
     title: "The tools of excellence.",
     subtitle: "Only the finest, always chosen with purpose.",
-    progressStart: 205 / 289,
-    progressEnd: 235 / 289,
+    progressStart: 242 / 336,
+    progressEnd: 282 / 336,
   },
   {
     id: 7,
@@ -93,7 +92,7 @@ const SCENES: CaptionScene[] = [
     timecode: "00:08 — 00:10",
     title: "Confidence, redefined.",
     subtitle: "This is the H&S standard.",
-    progressStart: 235 / 289,
+    progressStart: 282 / 336,
     progressEnd: 1,
   },
 ];
@@ -754,73 +753,101 @@ export default function TopLandingScrollytelling({
           className="absolute inset-0 w-full h-full object-cover object-center block z-0 transform-gpu"
         />
 
-        {/* Subtle directional shadow gradient for text contrast */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent md:bg-gradient-to-r md:from-black/65 md:via-black/15 md:to-transparent pointer-events-none z-10" />
+        {/* Subtle directional smoke vignette for text contrast on desktop and mobile */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent md:bg-gradient-to-r md:from-black/80 md:via-black/40 md:to-transparent pointer-events-none z-10" />
 
         {/* ============================================================= */}
         {/* DESKTOP FLOATING SIDE CAPTIONS (MD & UP)                      */}
         {/* ============================================================= */}
         <div className="hidden md:flex relative z-20 w-full max-w-7xl mx-auto px-8 lg:px-16 h-full items-center pointer-events-none">
-          <div
-            key={activeScene.id}
-            className="max-w-xl text-left pointer-events-auto transition-all duration-500 animate-fade-in"
-          >
-            {/* Scene Tag */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="w-2 h-2 rounded-full bg-[#D4B26A] shadow-[0_0_10px_#D4B26A]" />
-              <span className="text-xs font-mono font-bold tracking-[0.28em] text-[#D4B26A] uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
-                {activeScene.tag}
-              </span>
-            </div>
+          <div className="max-w-2xl text-left pointer-events-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeScene.id}
+                initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className="relative"
+              >
+                {/* Scene Tag & Glass Counter Badge */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#D4B26A] shadow-[0_0_12px_#D4B26A]" />
+                    <span
+                      style={{ textShadow: "0 2px 10px rgba(0,0,0,0.95)" }}
+                      className="text-xs font-mono font-bold tracking-[0.28em] text-[#D4B26A] uppercase"
+                    >
+                      {activeScene.tag}
+                    </span>
+                  </div>
+                  <span
+                    style={{ textShadow: "0 2px 8px rgba(0,0,0,0.95)" }}
+                    className="text-[10px] font-mono font-medium tracking-[0.2em] text-white/75 px-2.5 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15"
+                  >
+                    {activeScene.id} / {SCENES.length}
+                  </span>
+                </div>
 
-            {/* Scene Main Caption */}
-            <h1
-              style={{ fontFamily: "var(--font-serif)" }}
-              className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.08] mb-4 drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)]"
-            >
-              {activeScene.title}
-            </h1>
-
-            {/* Scene Supporting Line */}
-            <p
-              style={{ fontFamily: "var(--font-serif)" }}
-              className="text-xl md:text-2xl text-[#EAD39C] italic font-normal mb-5 drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)]"
-            >
-              {activeScene.subtitle}
-            </p>
-
-            {/* Hair | Skin | Makeup | Nails signature strip on Scene 1 & 7 */}
-            {(activeScene.id === 1 || activeScene.id === 7) && (
-              <div className="flex items-center gap-3 text-[11px] font-mono tracking-[0.3em] uppercase text-white/90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] mb-6">
-                <span>HAIR</span>
-                <span className="text-[#D4B26A]">•</span>
-                <span>SKIN</span>
-                <span className="text-[#D4B26A]">•</span>
-                <span>MAKEUP</span>
-                <span className="text-[#D4B26A]">•</span>
-                <span>NAILS</span>
-              </div>
-            )}
-
-            {/* CTAs on Final Reveal Scene (Scene 7) */}
-            {activeScene.id === 7 && (
-              <div className="mt-6 flex items-center gap-4">
-                <button
-                  onClick={onBookChair}
-                  className="px-8 py-4 bg-[#D4B26A] text-[#0B1510] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase transition-all shadow-[0_0_25px_rgba(212,178,106,0.45)] cursor-pointer flex items-center justify-center gap-2 rounded-full"
+                {/* Scene Main Caption */}
+                <h1
+                  style={{
+                    fontFamily: "var(--font-serif)",
+                    textShadow: "0 4px 24px rgba(0,0,0,0.95), 0 2px 8px rgba(0,0,0,0.9)",
+                  }}
+                  className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-[1.08] mb-4"
                 >
-                  <Calendar className="w-4 h-4" />
-                  <span>Book Appointment</span>
-                </button>
+                  {activeScene.title}
+                </h1>
 
-                <button
-                  onClick={onExploreServices}
-                  className="px-8 py-4 bg-black/50 border border-white/40 text-white hover:border-[#D4B26A] hover:text-[#D4B26A] font-semibold text-xs tracking-[0.2em] uppercase transition-colors cursor-pointer rounded-full"
+                {/* Scene Supporting Line */}
+                <p
+                  style={{
+                    fontFamily: "var(--font-serif)",
+                    textShadow: "0 2px 14px rgba(0,0,0,0.95)",
+                  }}
+                  className="text-xl md:text-2xl text-[#EAD39C] italic font-normal mb-5 leading-relaxed"
                 >
-                  <span>Explore Services</span>
-                </button>
-              </div>
-            )}
+                  {activeScene.subtitle}
+                </p>
+
+                {/* Hair | Skin | Makeup | Nails signature strip on Scene 1 & 7 */}
+                {(activeScene.id === 1 || activeScene.id === 7) && (
+                  <div
+                    style={{ textShadow: "0 2px 10px rgba(0,0,0,0.95)" }}
+                    className="flex items-center gap-3 text-[11px] font-mono tracking-[0.3em] uppercase text-white/90 mb-6"
+                  >
+                    <span>HAIR</span>
+                    <span className="text-[#D4B26A]">•</span>
+                    <span>SKIN</span>
+                    <span className="text-[#D4B26A]">•</span>
+                    <span>MAKEUP</span>
+                    <span className="text-[#D4B26A]">•</span>
+                    <span>NAILS</span>
+                  </div>
+                )}
+
+                {/* CTAs on Final Reveal Scene (Scene 7) */}
+                {activeScene.id === 7 && (
+                  <div className="mt-6 flex items-center gap-4">
+                    <button
+                      onClick={onBookChair}
+                      className="px-8 py-4 bg-[#D4B26A] text-[#0B1510] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase transition-all shadow-[0_0_25px_rgba(212,178,106,0.45)] cursor-pointer flex items-center justify-center gap-2 rounded-full active:scale-[0.98]"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span>Book Appointment</span>
+                    </button>
+
+                    <button
+                      onClick={onExploreServices}
+                      className="px-8 py-4 bg-black/60 backdrop-blur-md border border-white/35 text-white hover:border-[#D4B26A] hover:text-[#D4B26A] font-semibold text-xs tracking-[0.2em] uppercase transition-colors cursor-pointer rounded-full active:scale-[0.98]"
+                    >
+                      <span>Explore Services</span>
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
 
