@@ -202,7 +202,7 @@ END:VCALENDAR`;
     <section id="booking" className="relative py-24 md:py-32 bg-[#FAF8F4] border-t border-black/5">
       <div className="max-w-7xl mx-auto px-6 md:px-12">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-[#B48A3C]/30 bg-white mb-4 shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-[#0E4A35]" />
             <span className="text-[10px] tracking-[0.25em] uppercase text-[#0E4A35] font-bold">
@@ -224,10 +224,49 @@ END:VCALENDAR`;
             “Confidence, redefined. Reserve your private styling station.”
           </p>
 
-          <p className="text-xs sm:text-sm text-[#5F6661] max-w-lg mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#5F6661] max-w-lg mx-auto leading-relaxed mb-6">
             Select your signature service, preferred specialist, and time slot.
             Open daily from 9:30 AM to 10:00 PM at Nerul West, Navi Mumbai.
           </p>
+
+          {/* H&S Standards Guarantee Badges */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 max-w-2xl mx-auto text-left sm:text-center">
+            <div className="flex sm:flex-col items-center gap-2.5 sm:gap-1.5 p-3 rounded-xl bg-white border border-black/10 shadow-2xs">
+              <span className="w-6 h-6 rounded-full bg-[#0E4A35]/10 text-[#0E4A35] flex items-center justify-center text-xs font-bold flex-shrink-0">
+                ✓
+              </span>
+              <div>
+                <span className="text-[11px] font-bold text-[#0F1F18] block leading-tight">
+                  Private Station
+                </span>
+                <span className="text-[10px] text-[#5F6661]">Zero wait time guarantee</span>
+              </div>
+            </div>
+
+            <div className="flex sm:flex-col items-center gap-2.5 sm:gap-1.5 p-3 rounded-xl bg-white border border-black/10 shadow-2xs">
+              <span className="w-6 h-6 rounded-full bg-[#9E7B3A]/10 text-[#9E7B3A] flex items-center justify-center text-xs font-bold flex-shrink-0">
+                ₹
+              </span>
+              <div>
+                <span className="text-[11px] font-bold text-[#0F1F18] block leading-tight">
+                  No Advance Deposit
+                </span>
+                <span className="text-[10px] text-[#5F6661]">Pay at salon after service</span>
+              </div>
+            </div>
+
+            <div className="flex sm:flex-col items-center gap-2.5 sm:gap-1.5 p-3 rounded-xl bg-white border border-black/10 shadow-2xs">
+              <span className="w-6 h-6 rounded-full bg-[#0E4A35]/10 text-[#0E4A35] flex items-center justify-center text-xs font-bold flex-shrink-0">
+                ★
+              </span>
+              <div>
+                <span className="text-[11px] font-bold text-[#0F1F18] block leading-tight">
+                  Bespoke Consultation
+                </span>
+                <span className="text-[10px] text-[#5F6661]">Face &amp; crown architecture</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Confirmation Modal */}
@@ -320,36 +359,48 @@ END:VCALENDAR`;
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {SERVICES_DATA.map((srv) => (
-                    <button
-                      key={srv.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveServiceId(srv.id);
-                        if (onSelectServiceId) onSelectServiceId(srv.id);
-                      }}
-                      className={`p-4 rounded-xl text-left border transition-all duration-300 cursor-pointer flex flex-col justify-between ${
-                        activeServiceId === srv.id
-                          ? "bg-[#FAF8F4] border-[#0E4A35] shadow-xs"
-                          : "bg-white border-black/10 hover:border-black/30"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-xs sm:text-sm font-semibold text-[#0F1F18]">
-                          {srv.title}
-                        </span>
-                        <span
-                          style={{ fontFamily: "var(--font-serif)" }}
-                          className="text-sm font-bold text-[#9E7B3A] flex-shrink-0"
-                        >
-                          {srv.price}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-[#5F6661] font-mono">
-                        {srv.duration}
-                      </span>
-                    </button>
-                  ))}
+                  {SERVICES_DATA.map((srv) => {
+                    const isSrvSelected = activeServiceId === srv.id;
+                    return (
+                      <button
+                        key={srv.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveServiceId(srv.id);
+                          if (onSelectServiceId) onSelectServiceId(srv.id);
+                        }}
+                        className={`p-4 rounded-xl text-left border transition-all duration-300 cursor-pointer flex flex-col justify-between relative ${
+                          isSrvSelected
+                            ? "bg-[#FAF8F4] border-[#0E4A35] ring-1 ring-[#0E4A35] shadow-sm"
+                            : "bg-white border-black/10 hover:border-black/30"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <span
+                            className={`text-xs sm:text-sm font-bold ${
+                              isSrvSelected ? "text-[#0E4A35]" : "text-[#0F1F18]"
+                            }`}
+                          >
+                            {srv.title}
+                          </span>
+                          <span
+                            style={{ fontFamily: "var(--font-serif)" }}
+                            className="text-sm font-bold text-[#9E7B3A] flex-shrink-0"
+                          >
+                            {srv.price}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-[#5F6661] font-mono">
+                          <span>{srv.duration}</span>
+                          {isSrvSelected && (
+                            <span className="text-[10px] text-[#0E4A35] font-bold uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-[#0E4A35]" /> Selected
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -368,28 +419,54 @@ END:VCALENDAR`;
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {SPECIALISTS.map((barber) => (
-                    <button
-                      key={barber.id}
-                      type="button"
-                      onClick={() => setSelectedBarberId(barber.id)}
-                      className={`p-4 rounded-xl text-left border transition-all duration-300 cursor-pointer ${
-                        selectedBarberId === barber.id
-                          ? "bg-[#FAF8F4] border-[#0E4A35] shadow-xs"
-                          : "bg-white border-black/10 hover:border-black/30"
-                      }`}
-                    >
-                      <div className="text-xs sm:text-sm font-bold text-[#0F1F18] mb-1">
-                        {barber.name}
-                      </div>
-                      <div className="text-[11px] text-[#0E4A35] font-semibold mb-0.5">
-                        {barber.title}
-                      </div>
-                      <div className="text-[10px] text-[#5F6661] font-mono">
-                        {barber.experience}
-                      </div>
-                    </button>
-                  ))}
+                  {SPECIALISTS.map((barber) => {
+                    const isSelected = selectedBarberId === barber.id;
+                    const avatarLetter =
+                      barber.id === "any"
+                        ? "★"
+                        : barber.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("");
+                    return (
+                      <button
+                        key={barber.id}
+                        type="button"
+                        onClick={() => setSelectedBarberId(barber.id)}
+                        className={`p-4 rounded-xl text-left border transition-all duration-300 cursor-pointer flex items-start gap-3 relative ${
+                          isSelected
+                            ? "bg-[#FAF8F4] border-[#0E4A35] ring-1 ring-[#0E4A35] shadow-sm"
+                            : "bg-white border-black/10 hover:border-black/30"
+                        }`}
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 transition-colors ${
+                            isSelected
+                              ? "bg-[#0E4A35] text-[#EAD39C]"
+                              : "bg-[#FAF8F4] text-[#0E4A35] border border-black/10"
+                          }`}
+                        >
+                          {avatarLetter}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="text-xs sm:text-sm font-bold text-[#0F1F18] truncate">
+                              {barber.name}
+                            </span>
+                            {isSelected && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0" />
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#0E4A35] font-semibold mb-0.5 leading-snug">
+                            {barber.title}
+                          </div>
+                          <div className="text-[10px] text-[#5F6661] font-mono">
+                            {barber.experience}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

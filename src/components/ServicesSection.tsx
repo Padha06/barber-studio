@@ -137,13 +137,14 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   useEffect(() => {
     const handleScroll = () => {
       if (window.innerWidth >= 1024) return; // Mobile only
-      const targetThreshold = 260; // Top overlap collision zone right beneath the sticky hero
+      const targetThreshold = 255; // Pinned directly beneath sticky image frame
 
-      for (let i = 0; i < mobileCardRefs.current.length; i++) {
+      // Traverse in reverse order so the highest-index card that reached the threshold is active
+      for (let i = mobileCardRefs.current.length - 1; i >= 0; i--) {
         const el = mobileCardRefs.current[i];
         if (el) {
           const rect = el.getBoundingClientRect();
-          if (rect.top <= targetThreshold && rect.bottom >= targetThreshold - 40) {
+          if (rect.top <= targetThreshold + 30) {
             const srv = filtered[i];
             if (srv && srv.id !== activeServiceId) {
               setActiveServiceId(srv.id);
@@ -159,7 +160,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   }, [filtered, activeServiceId]);
 
   return (
-    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-hidden w-full max-w-[100vw]">
+    <section id="services" className="relative py-14 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-x-clip w-full max-w-[100vw]">
       {/* Background ambient lighting constrained to 100vw */}
       <div className="absolute top-1/3 left-0 w-72 h-72 bg-[#0E4A35]/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-0 w-72 h-72 bg-[#9E7B3A]/5 rounded-full blur-3xl pointer-events-none" />
@@ -288,7 +289,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
           </div>
 
           {/* Card 2: Overlapping Cards Stack that slide and stack over each other */}
-          <div className="relative pt-4 space-y-6">
+          <div className="relative pt-3">
             {filtered.map((service, idx) => {
               const isSelected = activeServiceId === service.id;
               return (
@@ -299,14 +300,14 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                   }}
                   onClick={() => setActiveServiceId(service.id)}
                   style={{
-                    // Sticky top pinned right under the 176px image + cascading stack
-                    top: `${240 + idx * 8}px`,
+                    // Sticky top pinned right under the image + slight cascading offset
+                    top: `${234 + idx * 6}px`,
                     zIndex: 10 + idx,
                   }}
-                  className={`sticky rounded-2xl p-4 sm:p-5 transition-all duration-300 border cursor-pointer ${
+                  className={`sticky rounded-2xl p-4 sm:p-5 transition-all duration-300 border cursor-pointer mb-8 shadow-[0_-8px_25px_rgba(0,0,0,0.12),0_12px_28px_rgba(0,0,0,0.06)] ${
                     isSelected
-                      ? "bg-[#FAF8F4] border-[#0E4A35] shadow-[0_16px_36px_rgba(14,74,53,0.22)] ring-1 ring-[#0E4A35]"
-                      : "bg-white border-black/10 shadow-[0_10px_25px_rgba(0,0,0,0.08)] opacity-95"
+                      ? "bg-[#FAF8F4] border-[#0E4A35] ring-2 ring-[#0E4A35]/30"
+                      : "bg-white border-black/10"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-1.5">
@@ -368,6 +369,47 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                 </div>
               );
             })}
+          </div>
+
+          {/* Mobile H&S Signature Standard Spotlight */}
+          <div className="mt-8 rounded-2xl border-2 border-[#B48A3C]/40 bg-[#FAF8F4] p-5 shadow-md relative overflow-hidden">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-[#9E7B3A]" />
+              <span className="text-[10px] tracking-[0.25em] uppercase text-[#0E4A35] font-bold font-mono">
+                H&amp;S Signature Standard
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mb-2">
+              <h3 style={{ fontFamily: "var(--font-serif)" }} className="text-lg font-bold text-[#0F1F18]">
+                Signature Precision Cut &amp; Styling
+              </h3>
+              <span style={{ fontFamily: "var(--font-serif)" }} className="text-lg font-bold text-[#9E7B3A]">
+                ₹850
+              </span>
+            </div>
+            <p className="text-xs text-[#5F6661] leading-relaxed mb-4">
+              Every appointment is executed to our 4-stage signature protocol:
+            </p>
+            <div className="space-y-2 mb-5">
+              {[
+                "Personal Face & Crown Consultation",
+                "Precision Shears & Micro-Clipper Blending",
+                "Botanical Wash & Scalp Pressure Massage",
+                "Bespoke Blow-Dry & Texture Finish",
+              ].map((step, sIdx) => (
+                <div key={sIdx} className="flex items-center gap-2 text-xs text-[#2F3A34]">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0" />
+                  <span className="font-medium">{step}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => onSelectService("signature-haircut")}
+              className="w-full py-3 rounded-full bg-[#0E4A35] text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-[#9E7B3A] transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            >
+              <span>Reserve This Service</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
