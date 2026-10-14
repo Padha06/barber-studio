@@ -825,96 +825,108 @@ export default function TopLandingScrollytelling({
         </div>
 
         {/* ============================================================= */}
-        {/* MOBILE FLOATING CAPTIONS (< MD) — CINEMATIC LUXURY CARD       */}
+        {/* MOBILE FLOATING CAPTIONS (< MD) — ETHEREAL SMOKE GLASS GLOW  */}
         {/* ============================================================= */}
-        <div className="md:hidden relative z-20 w-full h-full flex flex-col justify-end px-4 pb-20 pointer-events-none">
+        <div className="md:hidden relative z-20 w-full h-full flex flex-col justify-end px-5 pb-14 pointer-events-none">
+          {/* Subtle bottom atmospheric smoke vignette: fades seamlessly into the video without any harsh box edges */}
+          <div className="absolute inset-x-0 bottom-0 h-80 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none -z-10" />
+
           <div className="w-full max-w-sm mx-auto pointer-events-auto">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeScene.id}
-                initial={{ opacity: 0, y: 14, filter: "blur(4px)" }}
+                initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -10, filter: "blur(3px)" }}
-                transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
-                className="relative overflow-hidden rounded-2xl bg-black/45 backdrop-blur-md border border-white/10 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
+                exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="relative text-left"
               >
-                {/* Subtle top gold accent hairline */}
-                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4B26A]/60 to-transparent" />
-
-                {/* Header: Scene Tag & Step Badge */}
-                <div className="flex items-center justify-between gap-2 mb-2.5">
+                {/* Header: Glowing Scene Tag & Step Badge */}
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] shadow-[0_0_8px_#D4B26A]" />
-                    <span className="text-[10px] font-mono font-bold tracking-[0.22em] text-[#D4B26A] uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] shadow-[0_0_10px_#D4B26A]" />
+                    <span
+                      style={{ textShadow: "0 2px 8px rgba(0,0,0,0.95)" }}
+                      className="text-[10px] font-mono font-bold tracking-[0.24em] text-[#D4B26A] uppercase"
+                    >
                       {activeScene.tag}
                     </span>
                   </div>
-                  <span className="text-[9px] font-mono font-medium tracking-[0.15em] text-white/50 px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
+                  <span
+                    style={{ textShadow: "0 2px 8px rgba(0,0,0,0.95)" }}
+                    className="text-[9px] font-mono font-medium tracking-[0.18em] text-white/70 px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/15"
+                  >
                     {activeScene.id} / {SCENES.length}
                   </span>
                 </div>
 
-                {/* Main Headline */}
+                {/* Main Headline with soft shadow depth */}
                 <h2
                   style={{
                     fontFamily: "var(--font-serif)",
-                    textShadow: "0 2px 16px rgba(0,0,0,0.9)",
+                    textShadow: "0 3px 20px rgba(0,0,0,0.95), 0 1px 4px rgba(0,0,0,0.9)",
                   }}
-                  className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-[1.15] mb-1.5"
+                  className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-[1.12] mb-1.5"
                 >
                   {activeScene.title}
                 </h2>
 
-                {/* Subtitle */}
+                {/* Subtitle with warm gold tint */}
                 <p
                   style={{
                     fontFamily: "var(--font-serif)",
-                    textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+                    textShadow: "0 2px 12px rgba(0,0,0,0.95)",
                   }}
-                  className="text-sm text-[#EAD39C] italic mb-3 font-normal leading-snug"
+                  className="text-sm text-[#EAD39C] italic mb-2.5 font-normal leading-snug"
                 >
                   {activeScene.subtitle}
                 </p>
 
                 {/* Multi-discipline pill */}
-                <div className="flex items-center gap-1.5 text-[9px] font-mono tracking-[0.2em] uppercase text-white/70 mb-3.5">
+                <div
+                  style={{ textShadow: "0 2px 8px rgba(0,0,0,0.95)" }}
+                  className="flex items-center gap-1.5 text-[9px] font-mono tracking-[0.2em] uppercase text-white/75 mb-3"
+                >
                   <Sparkles className="w-2.5 h-2.5 text-[#D4B26A]" />
                   <span>Hair • Skin • Makeup • Nails</span>
                 </div>
 
-                {/* CTAs on Final Scene / Interactive Scroll Progress on Other Scenes */}
+                {/* CTAs on Final Scene / Animated Scroll Bar on Active Scenes */}
                 {activeScene.id === 7 ? (
                   <div className="flex flex-col gap-2 pt-1">
                     <button
                       onClick={onBookChair}
-                      className="w-full py-3 bg-[#D4B26A] text-[#0B1510] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 cursor-pointer rounded-full shadow-[0_0_20px_rgba(212,178,106,0.35)] transition-all active:scale-[0.98]"
+                      className="w-full py-3.5 bg-[#D4B26A] text-[#0B1510] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 cursor-pointer rounded-full shadow-[0_0_25px_rgba(212,178,106,0.45)] transition-all active:scale-[0.98]"
                     >
                       <Calendar className="w-3.5 h-3.5" />
                       <span>Book Appointment</span>
                     </button>
                     <button
                       onClick={onExploreServices}
-                      className="w-full py-2.5 bg-black/60 border border-white/30 text-white font-semibold text-xs tracking-[0.2em] uppercase cursor-pointer rounded-full transition-colors active:scale-[0.98]"
+                      className="w-full py-2.5 bg-black/60 backdrop-blur-sm border border-white/30 text-white font-semibold text-xs tracking-[0.2em] uppercase cursor-pointer rounded-full transition-colors active:scale-[0.98]"
                     >
                       <span>Explore Services</span>
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between pt-2 border-t border-white/10 text-[9px] font-mono tracking-widest uppercase text-white/60">
+                  <div
+                    style={{ textShadow: "0 2px 8px rgba(0,0,0,0.95)" }}
+                    className="flex items-center justify-between pt-1 text-[9px] font-mono tracking-widest uppercase text-white/70"
+                  >
                     <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] animate-pulse" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] animate-pulse shadow-[0_0_8px_#D4B26A]" />
                       <span>Scroll to explore</span>
                     </div>
-                    <div className="flex gap-1 items-center">
+                    <div className="flex gap-1.5 items-center">
                       {SCENES.map((s) => (
                         <div
                           key={s.id}
                           className={`h-1 rounded-full transition-all duration-300 ${
                             s.id === activeScene.id
-                              ? "w-4 bg-[#D4B26A]"
+                              ? "w-4 bg-[#D4B26A] shadow-[0_0_6px_#D4B26A]"
                               : s.id < activeScene.id
-                              ? "w-1 bg-[#D4B26A]/50"
-                              : "w-1 bg-white/20"
+                              ? "w-1 bg-[#D4B26A]/60"
+                              : "w-1 bg-white/25"
                           }`}
                         />
                       ))}
