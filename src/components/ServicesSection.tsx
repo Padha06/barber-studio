@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Clock, ArrowUpRight, Scissors, Sparkles, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Clock, ArrowUpRight, Scissors, Sparkles, CheckCircle2, ChevronRight } from "lucide-react";
 
 export interface ServiceItem {
   id: string;
@@ -24,7 +25,7 @@ export const SERVICES_DATA: ServiceItem[] = [
     duration: "45 mins",
     description:
       "Tailored haircut and styling crafted around your facial structure and hair texture. Includes relaxing wash ritual, scalp massage, and signature blow-dry finish.",
-    image: "/frames/frame-115.webp",
+    image: "/images/craft/craft-hair-blowout.webp",
     features: [
       "Personal Face & Crown Consultation",
       "Precision Shears & Micro-Clipper Blending",
@@ -40,7 +41,7 @@ export const SERVICES_DATA: ServiceItem[] = [
     duration: "60 mins",
     description:
       "Seamless zero-gap skin fade paired with architectural beard sculpting, hot towel steam infusion, straight-razor line definition, and nourishing argan beard oil.",
-    image: "/frames/frame-135.webp",
+    image: "/images/craft/craft-master-barbering.webp",
     features: [
       "Zero-Gap Graduated Fade Architecture",
       "Jawline Beard Proportion Balancing",
@@ -61,11 +62,11 @@ export const SERVICES_DATA: ServiceItem[] = [
       "Custom Shade & Undertone Mapping",
       "Bond-Building Plex Protection",
       "Hand-Painted Seamless Graduation",
-      "High-Gloss Toning & Deep Masque",
+      "Gloss Glaze & Silk Sealing Mask",
     ],
   },
   {
-    id: "keratin-botox-ritual",
+    id: "keratin-botox",
     title: "Brazilian Hair Botox & Keratin Ritual",
     category: "color",
     price: "₹5,500",
@@ -77,34 +78,34 @@ export const SERVICES_DATA: ServiceItem[] = [
       "Deep Cuticle Repair & Frizz Elimination",
       "Formaldehyde-Free Botanical Protein",
       "Ceramic Wash Lounge Spa Treatment",
-      "Thermal Seal & Silk Finish",
+      "High-Gloss Heat Sealing Polish",
     ],
   },
   {
-    id: "hydra-glow-skin",
+    id: "hydra-glow-facial",
     title: "Luxury Hydra-Glow Skin Ritual",
     category: "skin",
     price: "₹3,200",
     duration: "75 mins",
     description:
       "Multi-step dermal rejuvenation combining hydro-dermabrasion, botanical peptide infusion, lymphatic sculpting massage, and cooling gold hydro-jelly mask.",
-    image: "/frames/frame-198.webp",
+    image: "/frames/frame-045.webp",
     features: [
       "Digital Skin Barrier Analysis",
       "Gentle Ultrasonic Pore Purification",
       "Hyaluronic & Vitamin C Serum Infusion",
-      "24K Gold Illuminating Hydro-Mask",
+      "Sculpting Cold-Globe Lymphatic Drainage",
     ],
   },
   {
-    id: "bridal-nail-couture",
+    id: "editorial-makeup-nails",
     title: "Editorial HD Makeup & Nail Artistry",
     category: "bridal",
     price: "₹6,500",
     duration: "120 mins",
     description:
       "Flawless airbrush/HD occasion makeup paired with bespoke gel nail extensions, French chrome detailing, and luxury hand spa therapy.",
-    image: "/frames/frame-275.webp",
+    image: "/images/craft/craft-nails-couture.webp",
     features: [
       "HD / Airbrush Long-Wear Complexion",
       "Bespoke Eye & Lip Couture Styling",
@@ -128,15 +129,19 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
       : SERVICES_DATA.filter((s) => s.category === activeFilter);
 
   const currentActive =
-    SERVICES_DATA.find((s) => s.id === hoveredService) || SERVICES_DATA[0];
+    SERVICES_DATA.find((s) => s.id === hoveredService) || filtered[0] || SERVICES_DATA[0];
 
   return (
-    <section id="services" className="relative py-24 md:py-32 bg-[#ffffff] border-t border-black/5">
-      <div className="max-w-7xl mx-auto px-6 md:px-12">
+    <section id="services" className="relative py-20 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-hidden">
+      {/* Background ambient lighting */}
+      <div className="absolute top-1/3 -left-32 w-96 h-96 bg-[#0E4A35]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 -right-32 w-96 h-96 bg-[#9E7B3A]/5 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 relative z-10">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-14 gap-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 sm:mb-16 gap-6 sm:gap-8">
           <div>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-[#B48A3C]/30 bg-[#FAF8F4] mb-4">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-[#B48A3C]/30 bg-[#FAF8F4] mb-3.5 shadow-xs">
               <Scissors className="w-3.5 h-3.5 text-[#0E4A35]" />
               <span className="text-[10px] tracking-[0.25em] uppercase text-[#0E4A35] font-bold">
                 HAIR • SKIN • MAKEUP • NAILS
@@ -158,49 +163,70 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
           </p>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-10 border-b border-black/10 text-xs uppercase tracking-[0.18em] font-semibold">
+        {/* Filter Tabs with Smooth Indicator */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-8 sm:mb-12 border-b border-black/10 text-xs uppercase tracking-[0.18em] font-semibold scrollbar-none">
           {[
             { id: "all", label: "All Services" },
             { id: "hair", label: "Haircuts & Grooming" },
             { id: "color", label: "Color, Keratin & Botox" },
             { id: "skin", label: "Skin & Facials" },
             { id: "bridal", label: "Makeup & Nails" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveFilter(tab.id)}
-              className={`px-5 py-2.5 transition-all duration-300 whitespace-nowrap cursor-pointer rounded-full ${
-                activeFilter === tab.id
-                  ? "bg-[#0E4A35] text-white font-bold shadow-xs"
-                  : "text-[#5F6661] hover:text-[#0F1F18] hover:bg-[#FAF8F4]"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          ].map((tab) => {
+            const isTabActive = activeFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveFilter(tab.id);
+                  const firstOfFilter =
+                    tab.id === "all"
+                      ? SERVICES_DATA[0].id
+                      : SERVICES_DATA.find((s) => s.category === tab.id)?.id || SERVICES_DATA[0].id;
+                  setHoveredService(firstOfFilter);
+                }}
+                className={`relative px-4 sm:px-5 py-2.5 transition-all duration-300 whitespace-nowrap cursor-pointer rounded-full ${
+                  isTabActive
+                    ? "text-white font-bold"
+                    : "text-[#5F6661] hover:text-[#0F1F18] hover:bg-[#FAF8F4]"
+                }`}
+              >
+                {isTabActive && (
+                  <motion.div
+                    layoutId="activeFilterPill"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    className="absolute inset-0 bg-[#0E4A35] rounded-full shadow-xs -z-10"
+                  />
+                )}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Editorial Split Layout: Left Interactive List, Right Arched Mirror Preview */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           {/* Services List (7 Cols) */}
           <div className="lg:col-span-7 divide-y divide-black/10">
-            {filtered.map((service) => {
+            {filtered.map((service, idx) => {
               const isSelected = hoveredService === service.id;
               return (
-                <div
+                <motion.div
                   key={service.id}
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-40px" }}
+                  transition={{ duration: 0.4, delay: idx * 0.05 }}
                   onMouseEnter={() => setHoveredService(service.id)}
                   onClick={() => setHoveredService(service.id)}
-                  className={`group py-7 transition-all duration-300 cursor-pointer ${
+                  className={`group py-6 sm:py-7 transition-all duration-300 cursor-pointer rounded-xl ${
                     isSelected
-                      ? "pl-5 border-l-2 border-[#0E4A35] bg-[#FAF8F4]/90"
-                      : "pl-0 hover:pl-2"
+                      ? "pl-4 sm:pl-5 border-l-4 border-[#0E4A35] bg-[#FAF8F4]/90 shadow-2xs"
+                      : "pl-2 hover:pl-3 hover:bg-[#FAF8F4]/40"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-3 mb-1.5">
+                      <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
                         <h3
                           style={{ fontFamily: "var(--font-serif)" }}
                           className={`text-xl sm:text-2xl font-bold tracking-wide transition-colors ${
@@ -211,7 +237,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                         >
                           {service.title}
                         </h3>
-                        <div className="flex items-center gap-1 text-[11px] text-[#5F6661] font-mono">
+                        <div className="flex items-center gap-1 text-[11px] text-[#5F6661] font-mono px-2 py-0.5 rounded-full bg-black/5">
                           <Clock className="w-3 h-3 text-[#9E7B3A]" />
                           <span>{service.duration}</span>
                         </div>
@@ -222,16 +248,31 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                       </p>
 
                       {/* Key features chips */}
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3">
                         {service.features.slice(0, 3).map((f) => (
                           <span
                             key={f}
-                            className="inline-flex items-center gap-1 text-[10px] text-[#2F3A34] bg-white px-2.5 py-1 rounded-full border border-black/10"
+                            className="inline-flex items-center gap-1 text-[10px] text-[#2F3A34] bg-white px-2.5 py-1 rounded-full border border-black/10 shadow-2xs"
                           >
                             <CheckCircle2 className="w-2.5 h-2.5 text-[#0E4A35]" />
                             {f}
                           </span>
                         ))}
+                      </div>
+
+                      {/* Mobile Inline Thumbnail Preview */}
+                      <div className="lg:hidden mt-3 mb-2 overflow-hidden rounded-lg relative aspect-[16/9] w-full max-w-sm border border-black/10">
+                        <Image
+                          src={service.image}
+                          alt={service.title}
+                          fill
+                          sizes="(max-width: 768px) 100vw, 360px"
+                          className="object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        <span className="absolute bottom-2 left-2.5 text-[9px] font-mono font-bold tracking-wider uppercase text-white/90">
+                          {service.duration} • Signature Standard
+                        </span>
                       </div>
                     </div>
 
@@ -249,34 +290,45 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                           e.stopPropagation();
                           onSelectService(service.id);
                         }}
-                        className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase text-[#0E4A35] hover:text-[#9E7B3A] transition-colors py-1 group/btn cursor-pointer"
+                        className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase px-3.5 py-1.5 rounded-full bg-[#0E4A35] text-white hover:bg-[#9E7B3A] transition-all shadow-xs cursor-pointer active:scale-95"
                       >
                         <span>Book Now</span>
-                        <ArrowUpRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+                        <ArrowUpRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
 
-          {/* Sticky Arched Mirror Showcase Card (5 Cols - Inspired by H&S Salon Mirrors) */}
-          <div className="lg:col-span-5 lg:sticky lg:top-28">
+          {/* Sticky Arched Mirror Showcase Card (5 Cols - Desktop Mirror View) */}
+          <div className="hidden lg:block lg:col-span-5 lg:sticky lg:top-28">
             <div className="relative rounded-t-[180px] rounded-b-2xl border-2 border-[#B48A3C]/40 bg-[#FAF8F4] overflow-hidden p-3.5 shadow-[0_20px_50px_rgba(14,74,53,0.1)] group">
-              {/* Arched Mirror Image Container */}
+              {/* Arched Mirror Image Container with Framer Cross-Dissolve */}
               <div className="relative h-80 sm:h-96 w-full overflow-hidden rounded-t-[168px] rounded-b-lg bg-[#0E4A35]/10">
-                <Image
-                  src={currentActive.image}
-                  alt={currentActive.title}
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 40vw"
-                  className="object-cover object-center transition-all duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/15" />
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentActive.id}
+                    initial={{ opacity: 0, scale: 1.05 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute inset-0"
+                  >
+                    <Image
+                      src={currentActive.image}
+                      alt={currentActive.title}
+                      fill
+                      sizes="40vw"
+                      className="object-cover object-center"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/15" />
+                  </motion.div>
+                </AnimatePresence>
 
                 {/* Bottom Badge Inside Arch */}
-                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-10">
                   <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-[#B48A3C]/30 flex items-center gap-2 shadow-xs">
                     <Sparkles className="w-3 h-3 text-[#9E7B3A]" />
                     <span className="text-[10px] tracking-widest uppercase text-[#0F1F18] font-bold">
@@ -288,37 +340,47 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
 
               {/* Service Details Card Footer */}
               <div className="p-6 bg-white rounded-xl mt-3 border border-black/5">
-                <div className="flex items-center justify-between mb-3 gap-2">
-                  <span
-                    style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-lg sm:text-xl font-bold text-[#0F1F18]"
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentActive.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    {currentActive.title}
-                  </span>
-                  <span
-                    style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-2xl font-bold text-[#9E7B3A] flex-shrink-0"
-                  >
-                    {currentActive.price}
-                  </span>
-                </div>
-
-                <div className="space-y-2 mb-6">
-                  {currentActive.features.map((feat) => (
-                    <div key={feat} className="flex items-center gap-2 text-xs text-[#4A4640]">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0" />
-                      <span>{feat}</span>
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span
+                        style={{ fontFamily: "var(--font-serif)" }}
+                        className="text-lg sm:text-xl font-bold text-[#0F1F18]"
+                      >
+                        {currentActive.title}
+                      </span>
+                      <span
+                        style={{ fontFamily: "var(--font-serif)" }}
+                        className="text-2xl font-bold text-[#9E7B3A] flex-shrink-0"
+                      >
+                        {currentActive.price}
+                      </span>
                     </div>
-                  ))}
-                </div>
 
-                <button
-                  onClick={() => onSelectService(currentActive.id)}
-                  className="w-full py-3.5 rounded-full bg-[#0E4A35] text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-[#9E7B3A] transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>Reserve This Service</span>
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
+                    <div className="space-y-2 mb-6">
+                      {currentActive.features.map((feat) => (
+                        <div key={feat} className="flex items-center gap-2 text-xs text-[#4A4640]">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#0E4A35] flex-shrink-0" />
+                          <span>{feat}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => onSelectService(currentActive.id)}
+                      className="w-full py-3.5 rounded-full bg-[#0E4A35] text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-[#9E7B3A] transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                    >
+                      <span>Reserve This Service</span>
+                      <ArrowUpRight className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+                </AnimatePresence>
               </div>
             </div>
           </div>
