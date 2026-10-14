@@ -610,11 +610,11 @@ export default function TopLandingScrollytelling({
           Math.abs(diff) > 0.00003 ||
           Math.abs(velocityRef.current) > 0.00003
         ) {
-          const desiredVelocity = diff * 0.044;
+          const desiredVelocity = diff * 0.075;
           velocityRef.current +=
-            (desiredVelocity - velocityRef.current) * Math.min(1, 0.24 * dt);
+            (desiredVelocity - velocityRef.current) * Math.min(1, 0.45 * dt);
 
-          const maxVelocity = 0.0038;
+          const maxVelocity = 0.0065;
           const clampedVel = Math.max(
             -maxVelocity,
             Math.min(maxVelocity, velocityRef.current)
@@ -743,7 +743,7 @@ export default function TopLandingScrollytelling({
     <div
       ref={containerRef}
       id="hero"
-      className="relative bg-white w-full h-[480vh] md:h-[1120vh]"
+      className="relative bg-white w-full h-[480vh] md:h-[750vh]"
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-svh md:h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
