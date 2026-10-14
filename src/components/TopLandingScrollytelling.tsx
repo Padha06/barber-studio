@@ -825,79 +825,104 @@ export default function TopLandingScrollytelling({
         </div>
 
         {/* ============================================================= */}
-        {/* MOBILE FLOATING CAPTIONS (< MD) — ZERO-REMOUNT GPU LAYER      */}
+        {/* MOBILE FLOATING CAPTIONS (< MD) — CINEMATIC LUXURY CARD       */}
         {/* ============================================================= */}
-        <div className="md:hidden relative z-20 w-full h-full flex flex-col justify-end px-6 pb-24 pointer-events-none">
-          <div className="pointer-events-auto text-left max-w-sm">
-            {/* Scene Tag */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[#D4B26A]" />
-              <span
-                style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9)" }}
-                className="text-[10px] font-mono font-bold tracking-[0.24em] text-[#D4B26A] uppercase"
+        <div className="md:hidden relative z-20 w-full h-full flex flex-col justify-end px-4 pb-20 pointer-events-none">
+          <div className="w-full max-w-sm mx-auto pointer-events-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeScene.id}
+                initial={{ opacity: 0, y: 14, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -10, filter: "blur(3px)" }}
+                transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
+                className="relative overflow-hidden rounded-2xl bg-black/45 backdrop-blur-md border border-white/10 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
               >
-                {activeScene.tag}
-              </span>
-            </div>
+                {/* Subtle top gold accent hairline */}
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4B26A]/60 to-transparent" />
 
-            {/* Title */}
-            <h2
-              style={{
-                fontFamily: "var(--font-serif)",
-                textShadow: "0 3px 14px rgba(0,0,0,0.95)",
-              }}
-              className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight mb-2"
-            >
-              {activeScene.title}
-            </h2>
+                {/* Header: Scene Tag & Step Badge */}
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] shadow-[0_0_8px_#D4B26A]" />
+                    <span className="text-[10px] font-mono font-bold tracking-[0.22em] text-[#D4B26A] uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+                      {activeScene.tag}
+                    </span>
+                  </div>
+                  <span className="text-[9px] font-mono font-medium tracking-[0.15em] text-white/50 px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
+                    {activeScene.id} / {SCENES.length}
+                  </span>
+                </div>
 
-            {/* Subtitle */}
-            <p
-              style={{
-                fontFamily: "var(--font-serif)",
-                textShadow: "0 2px 10px rgba(0,0,0,0.95)",
-              }}
-              className="text-base text-[#EAD39C] italic mb-3 font-medium"
-            >
-              {activeScene.subtitle}
-            </p>
-
-            {/* Hair | Skin | Makeup | Nails pill on mobile */}
-            <div
-              style={{ textShadow: "0 2px 8px rgba(0,0,0,0.9)" }}
-              className="flex items-center gap-2 text-[10px] font-mono tracking-[0.22em] uppercase text-white/85 mb-4"
-            >
-              <Sparkles className="w-3 h-3 text-[#D4B26A]" />
-              <span>Hair • Skin • Makeup • Nails</span>
-            </div>
-
-            {/* CTAs on Final Scene on Mobile */}
-            {activeScene.id === 7 ? (
-              <div className="flex flex-col gap-2.5">
-                <button
-                  onClick={onBookChair}
-                  className="w-full py-3.5 bg-[#D4B26A] text-[#0B1510] font-bold text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 cursor-pointer rounded-full"
+                {/* Main Headline */}
+                <h2
+                  style={{
+                    fontFamily: "var(--font-serif)",
+                    textShadow: "0 2px 16px rgba(0,0,0,0.9)",
+                  }}
+                  className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-[1.15] mb-1.5"
                 >
-                  <Calendar className="w-4 h-4" />
-                  <span>Book Appointment</span>
-                </button>
-                <button
-                  onClick={onExploreServices}
-                  className="w-full py-3 bg-black/60 border border-white/40 text-white font-semibold text-xs tracking-[0.2em] uppercase cursor-pointer rounded-full"
+                  {activeScene.title}
+                </h2>
+
+                {/* Subtitle */}
+                <p
+                  style={{
+                    fontFamily: "var(--font-serif)",
+                    textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+                  }}
+                  className="text-sm text-[#EAD39C] italic mb-3 font-normal leading-snug"
                 >
-                  <span>Explore Services</span>
-                </button>
-              </div>
-            ) : (
-              /* Mobile Scroll Indicator */
-              <div
-                style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}
-                className="flex items-center gap-2 text-white/80 text-[10px] font-mono tracking-widest uppercase"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-[#D4B26A]" />
-                <span>Scroll to experience H&amp;S Salon</span>
-              </div>
-            )}
+                  {activeScene.subtitle}
+                </p>
+
+                {/* Multi-discipline pill */}
+                <div className="flex items-center gap-1.5 text-[9px] font-mono tracking-[0.2em] uppercase text-white/70 mb-3.5">
+                  <Sparkles className="w-2.5 h-2.5 text-[#D4B26A]" />
+                  <span>Hair • Skin • Makeup • Nails</span>
+                </div>
+
+                {/* CTAs on Final Scene / Interactive Scroll Progress on Other Scenes */}
+                {activeScene.id === 7 ? (
+                  <div className="flex flex-col gap-2 pt-1">
+                    <button
+                      onClick={onBookChair}
+                      className="w-full py-3 bg-[#D4B26A] text-[#0B1510] hover:bg-white font-bold text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 cursor-pointer rounded-full shadow-[0_0_20px_rgba(212,178,106,0.35)] transition-all active:scale-[0.98]"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>Book Appointment</span>
+                    </button>
+                    <button
+                      onClick={onExploreServices}
+                      className="w-full py-2.5 bg-black/60 border border-white/30 text-white font-semibold text-xs tracking-[0.2em] uppercase cursor-pointer rounded-full transition-colors active:scale-[0.98]"
+                    >
+                      <span>Explore Services</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pt-2 border-t border-white/10 text-[9px] font-mono tracking-widest uppercase text-white/60">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#D4B26A] animate-pulse" />
+                      <span>Scroll to explore</span>
+                    </div>
+                    <div className="flex gap-1 items-center">
+                      {SCENES.map((s) => (
+                        <div
+                          key={s.id}
+                          className={`h-1 rounded-full transition-all duration-300 ${
+                            s.id === activeScene.id
+                              ? "w-4 bg-[#D4B26A]"
+                              : s.id < activeScene.id
+                              ? "w-1 bg-[#D4B26A]/50"
+                              : "w-1 bg-white/20"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
 
