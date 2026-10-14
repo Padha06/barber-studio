@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, ArrowUpRight, Scissors, Sparkles, CheckCircle2, ChevronRight } from "lucide-react";
+import { Clock, ArrowUpRight, Scissors, Sparkles, CheckCircle2 } from "lucide-react";
 
 export interface ServiceItem {
   id: string;
@@ -131,13 +131,15 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   const currentActive =
     SERVICES_DATA.find((s) => s.id === activeServiceId) || filtered[0] || SERVICES_DATA[0];
 
-  // Mobile scroll tracking: update sticky hero image based on which card is near the top
+  // Scroll tracking on both mobile & desktop: observe which card overlaps into view
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.innerWidth >= 1024) return; // Only for mobile/tablet
-      const targetThreshold = window.innerHeight * 0.45;
+      const isMobile = window.innerWidth < 1024;
+      // On mobile, trigger point is right under the sticky image (~280px)
+      // On desktop, trigger point is mid-screen
+      const targetThreshold = isMobile ? 320 : window.innerHeight * 0.45;
 
       for (let i = 0; i < cardRefs.current.length; i++) {
         const el = cardRefs.current[i];
@@ -159,7 +161,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   }, [filtered, activeServiceId]);
 
   return (
-    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-hidden">
+    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-visible">
       {/* Background ambient lighting */}
       <div className="absolute top-1/3 -left-32 w-96 h-96 bg-[#0E4A35]/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 -right-32 w-96 h-96 bg-[#9E7B3A]/5 rounded-full blur-3xl pointer-events-none" />
@@ -231,16 +233,16 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
         </div>
 
         {/* =================================================================== */}
-        {/* MOBILE DUAL-CARD STACK VIEW (< LG): 1 Sticky Image + Overlapping Stack */}
+        {/* MOBILE STACK ARCHITECTURE (< LG): STICKY IMAGE AT TOP + OVERLAPPING CARDS BELOW */}
         {/* =================================================================== */}
-        <div className="lg:hidden relative pb-12">
-          {/* Card 1: Sticky Top Arched Frame that changes dynamically on scroll */}
-          <div className="sticky top-20 z-20 pt-2 pb-4 bg-white/95 backdrop-blur-md">
-            <div className="relative aspect-[16/9] w-full max-w-md mx-auto overflow-hidden rounded-2xl border-2 border-[#B48A3C]/40 bg-[#0F1F18] shadow-lg">
+        <div className="lg:hidden relative pb-16">
+          {/* Card 1: Permanently visible sticky image frame (z-40) pinned at top */}
+          <div className="sticky top-16 z-40 pt-2 pb-2 bg-white/95 backdrop-blur-md">
+            <div className="relative h-48 w-full max-w-md mx-auto overflow-hidden rounded-2xl border-2 border-[#B48A3C]/40 bg-[#0F1F18] shadow-lg">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentActive.id}
-                  initial={{ opacity: 0, scale: 1.06 }}
+                  initial={{ opacity: 0, scale: 1.05 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.96 }}
                   transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
@@ -254,32 +256,32 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                     className="object-cover object-center"
                     priority
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                 </motion.div>
               </AnimatePresence>
 
               {/* Top Pill inside sticky image */}
-              <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-[#D4B26A]/40 text-[#D4B26A] text-[9px] font-mono tracking-widest uppercase">
+              <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-[#D4B26A]/40 text-[#D4B26A] text-[9px] font-mono tracking-widest uppercase">
                 <Sparkles className="w-2.5 h-2.5" />
                 <span>{currentActive.duration} • SIGNATURE</span>
               </div>
 
-              {/* Title & Price overlay on sticky photo */}
-              <div className="absolute bottom-3 left-3.5 right-3.5 z-10 flex items-end justify-between gap-2">
+              {/* Active Service Title & Price overlay on sticky photo */}
+              <div className="absolute bottom-2.5 left-3 right-3 z-10 flex items-end justify-between gap-2">
                 <div>
-                  <span className="text-[10px] font-mono font-bold tracking-widest uppercase text-[#D4B26A] block">
+                  <span className="text-[9px] font-mono font-bold tracking-widest uppercase text-[#D4B26A] block">
                     ACTIVE SERVICE
                   </span>
                   <h4
                     style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-lg font-bold text-white leading-tight"
+                    className="text-base font-bold text-white leading-tight line-clamp-1"
                   >
                     {currentActive.title}
                   </h4>
                 </div>
                 <span
                   style={{ fontFamily: "var(--font-serif)" }}
-                  className="text-2xl font-bold text-[#EAD39C] flex-shrink-0"
+                  className="text-xl font-bold text-[#EAD39C] flex-shrink-0"
                 >
                   {currentActive.price}
                 </span>
@@ -287,8 +289,8 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
             </div>
           </div>
 
-          {/* Card 2: Overlapping Cards Stack (Each card sticky-scrolls over the previous) */}
-          <div className="relative z-30 space-y-4 pt-2">
+          {/* Card 2: Overlapping Cards Stack that slide and stack over each other */}
+          <div className="relative pt-4 space-y-6">
             {filtered.map((service, idx) => {
               const isSelected = activeServiceId === service.id;
               return (
@@ -299,12 +301,14 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                   }}
                   onClick={() => setActiveServiceId(service.id)}
                   style={{
-                    top: `${140 + idx * 6}px`, // Cascading sticky overlap effect
+                    // Each card sticks below the image (image is ~200px tall), and stacks slightly
+                    top: `${275 + idx * 8}px`,
+                    zIndex: 10 + idx,
                   }}
                   className={`sticky rounded-2xl p-5 transition-all duration-300 border cursor-pointer ${
                     isSelected
-                      ? "bg-[#FAF8F4] border-[#0E4A35] shadow-[0_12px_30px_rgba(14,74,53,0.18)] translate-y-0"
-                      : "bg-white border-black/10 shadow-md opacity-95 hover:opacity-100"
+                      ? "bg-[#FAF8F4] border-[#0E4A35] shadow-[0_16px_36px_rgba(14,74,53,0.22)] ring-1 ring-[#0E4A35]"
+                      : "bg-white border-black/10 shadow-[0_10px_25px_rgba(0,0,0,0.08)] opacity-95"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
@@ -340,7 +344,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                   </p>
 
                   {/* Feature chips */}
-                  <div className="flex flex-wrap gap-1.5 mb-4">
+                  <div className="flex flex-wrap gap-1.5 mb-3.5">
                     {service.features.slice(0, 2).map((feat) => (
                       <span
                         key={feat}
@@ -370,9 +374,9 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
         </div>
 
         {/* =================================================================== */}
-        {/* DESKTOP SPLIT VIEW (LG & UP): 7-Col Interactive List + 5-Col Mirror */}
+        {/* DESKTOP SPLIT VIEW (LG & UP): 7-Col Interactive List + Sticky Mirror */}
         {/* =================================================================== */}
-        <div className="hidden lg:grid grid-cols-12 gap-12 items-start">
+        <div className="hidden lg:grid grid-cols-12 gap-12 items-start relative">
           {/* Services List (7 Cols) */}
           <div className="col-span-7 divide-y divide-black/10">
             {filtered.map((service, idx) => {
@@ -455,8 +459,8 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
             })}
           </div>
 
-          {/* Sticky Arched Mirror Showcase Card (5 Cols - Desktop Mirror View) */}
-          <div className="col-span-5 sticky top-28">
+          {/* Sticky Arched Mirror Showcase Card (5 Cols - Desktop Mirror View pinned until all services finish) */}
+          <div className="col-span-5 sticky top-24 self-start">
             <div className="relative rounded-t-[180px] rounded-b-2xl border-2 border-[#B48A3C]/40 bg-[#FAF8F4] overflow-hidden p-3.5 shadow-[0_20px_50px_rgba(14,74,53,0.1)] group">
               {/* Arched Mirror Image Container with Framer Cross-Dissolve */}
               <div className="relative h-96 w-full overflow-hidden rounded-t-[168px] rounded-b-lg bg-[#0E4A35]/10">
