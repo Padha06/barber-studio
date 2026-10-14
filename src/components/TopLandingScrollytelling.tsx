@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, Sparkles } from "lucide-react";
+import NextImage from "next/image";
 
 interface TopLandingScrollytellingProps {
   onBookChair: () => void;
@@ -303,24 +304,26 @@ export default function TopLandingScrollytelling({
     const isMobile = window.innerWidth < 768;
     isMobileRef.current = isMobile;
     const totalFrames = isMobile ? MOBILE_TOTAL_FRAMES : TOTAL_FRAMES;
-    const progressDenominator = totalFrames;
+    // Critical intro quota: once the opening scene (25-35 frames) is decoded, unlock entrance smoothly
+    const criticalQuota = Math.min(isMobile ? 25 : 35, totalFrames);
+    const progressDenominator = criticalQuota;
     let isCancelled = false;
 
     const loadingSet = new Set<number>();
-    // Frames that are settled (loaded OR failed). Failed frames must be
-    // marked settled so getNextFrameToLoad never retries them forever.
     const settledSet = new Set<number>(loadedSetRef.current);
-    let lastReportedPercent = Math.floor(
-      (settledSet.size / progressDenominator) * 100
-    );
+    let hasUnlocked = false;
+
     const reportProgress = () => {
       if (isCancelled) return;
-      const pct = Math.floor((settledSet.size / progressDenominator) * 100);
-      if (pct !== lastReportedPercent) {
-        lastReportedPercent = pct;
-        setPreloadProgress(
-          Math.min(1, settledSet.size / progressDenominator)
-        );
+      const progress = Math.min(1, settledSet.size / progressDenominator);
+      setPreloadProgress(progress);
+
+      if (settledSet.size >= criticalQuota && !hasUnlocked) {
+        hasUnlocked = true;
+        setPreloadProgress(1);
+        setTimeout(() => {
+          if (!isCancelled) setPreloadFinished(true);
+        }, 500);
       }
     };
     reportProgress();
@@ -702,40 +705,100 @@ export default function TopLandingScrollytelling({
           <motion.div
             key="hero-loader"
             initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.45, ease: "easeInOut" }}
-            className="fixed inset-0 z-[100] bg-[#0B1510] flex flex-col items-center justify-center select-none"
+            exit={{ opacity: 0, scale: 1.04, filter: "blur(10px)" }}
+            transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed inset-0 z-[100] bg-[#07100B] flex flex-col items-center justify-center select-none overflow-hidden"
           >
-            {/* Brand mark */}
-            <div
-              style={{ fontFamily: "var(--font-serif)" }}
-              className="text-5xl font-bold text-white tracking-tight mb-1"
-            >
-              H<span className="text-[#D4B26A]">&amp;</span>S
-            </div>
-            <div className="text-[10px] font-mono font-semibold tracking-[0.45em] text-[#D4B26A] uppercase mb-10">
-              Salon
-            </div>
+            {/* Background Ambient Golden Aura */}
+            <div className="absolute w-[500px] h-[500px] bg-[#9E7B3A]/10 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute w-[300px] h-[300px] bg-[#0E4A35]/20 rounded-full blur-[90px] pointer-events-none" />
 
-            {/* Progress bar */}
-            <div className="w-56">
-              <div className="flex justify-between text-[10px] font-mono tracking-[0.25em] text-[#D4B26A]/80 mb-2">
-                <span>LOADING</span>
-                <span className="tabular-nums">
-                  {Math.round(preloadProgress * 100)}%
-                </span>
+            {/* Optional Background Video Layer (plays if loader-video.mp4 is provided) */}
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none"
+              src="/loader-video.mp4"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+            />
+
+            <div className="relative z-10 flex flex-col items-center text-center px-6">
+              {/* Luxury Emblem Crest with Shimmering Glow */}
+              <div className="relative mb-5">
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full p-[2px] bg-gradient-to-tr from-[#9E7B3A] via-[#EAD39C] to-[#0E4A35] shadow-[0_0_40px_rgba(158,123,58,0.35)] flex items-center justify-center">
+                  <div className="relative w-full h-full rounded-full overflow-hidden bg-[#0A1711] flex items-center justify-center p-2.5">
+                    <NextImage
+                      src="/hs-logo.webp"
+                      alt="H&S Salon Emblem"
+                      width={68}
+                      height={68}
+                      className="object-contain"
+                      priority
+                    />
+                  </div>
+                </div>
+
+                {/* Outer Breathing Ring */}
+                <div className="absolute -inset-2 rounded-full border border-[#D4B26A]/20 animate-ping opacity-20 pointer-events-none" />
               </div>
-              <div className="h-[2px] w-full bg-white/10 overflow-hidden rounded-full">
-                <div
-                  className="h-full bg-[#D4B26A] rounded-full transition-[width] duration-300 ease-out"
-                  style={{ width: `${preloadProgress * 100}%` }}
-                />
+
+              {/* Brand Typography */}
+              <h1
+                style={{ fontFamily: "var(--font-serif)" }}
+                className="text-3xl sm:text-4xl font-bold tracking-[0.2em] uppercase bg-gradient-to-b from-white via-[#FAF8F4] to-[#EAD39C] bg-clip-text text-transparent mb-1"
+              >
+                H&amp;S SALON
+              </h1>
+
+              <div className="flex items-center gap-2 text-[9px] font-mono tracking-[0.35em] text-[#D4B26A] uppercase mb-1">
+                <span>HAIR</span>
+                <span>•</span>
+                <span>SKIN</span>
+                <span>•</span>
+                <span>MAKEUP</span>
+                <span>•</span>
+                <span>NAILS</span>
+              </div>
+
+              <span className="text-[8px] font-mono tracking-[0.25em] text-white/40 uppercase mb-8">
+                Nerul West • Navi Mumbai
+              </span>
+
+              {/* Luxury Progress Section */}
+              <div className="w-64 sm:w-80">
+                <div className="flex justify-between items-center text-[10px] font-mono tracking-[0.25em] text-[#D4B26A]/90 mb-2.5">
+                  <span className="truncate pr-2">
+                    {preloadProgress < 0.35
+                      ? "CALIBRATING ARCHITECTURE"
+                      : preloadProgress < 0.75
+                      ? "BUFFERING SANCTUARY"
+                      : preloadProgress < 1
+                      ? "PREPARING PRIVATE CHAIR"
+                      : "SANCTUARY UNLOCKED"}
+                  </span>
+                  <span className="tabular-nums font-bold flex-shrink-0">
+                    {Math.round(preloadProgress * 100)}%
+                  </span>
+                </div>
+
+                {/* Progress Bar Track */}
+                <div className="h-[3px] w-full bg-white/10 overflow-hidden rounded-full p-[1px] relative">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#0E4A35] via-[#9E7B3A] to-[#EAD39C] rounded-full transition-[width] duration-300 ease-out shadow-[0_0_10px_#D4B26A]"
+                    style={{ width: `${Math.max(4, preloadProgress * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center gap-2 text-[9px] font-mono tracking-[0.25em] text-white/50 uppercase">
+                <Sparkles className="w-3 h-3 text-[#D4B26A] animate-pulse" />
+                <span>Stepping inside luxury</span>
               </div>
             </div>
-
-            <p className="mt-6 text-[9px] font-mono tracking-[0.3em] text-white/40 uppercase">
-              Preparing your experience
-            </p>
           </motion.div>
         )}
       </AnimatePresence>
