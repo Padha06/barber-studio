@@ -28,14 +28,16 @@ html {
   background-color: #ffffff;
   color: #0f0f0f;
   color-scheme: light;
+  overflow-x: clip;
+  max-width: 100vw;
 }
 
 body {
   background-color: #ffffff;
   color: #0f0f0f;
-  /* clip (not hidden) — hidden turns <body> into a scroll container, which
-     breaks position: sticky in the scrollytelling hero on mobile browsers. */
   overflow-x: clip;
+  max-width: 100vw;
+  position: relative;
   selection-background-color: #9e7b3a;
   selection-color: #ffffff;
 }

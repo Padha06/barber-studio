@@ -23,7 +23,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-white text-[#0F0F0F] selection:bg-[#9E7B3A] selection:text-white">
+    <main className="min-h-screen bg-white text-[#0F0F0F] selection:bg-[#9E7B3A] selection:text-white w-full max-w-[100vw] overflow-x-clip">
       {/* 1. Sticky Luxury Navigation */}
       <Navbar onOpenBooking={() => scrollToSection("booking")} />
 

@@ -161,10 +161,10 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   }, [filtered, activeServiceId]);
 
   return (
-    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-visible">
-      {/* Background ambient lighting */}
-      <div className="absolute top-1/3 -left-32 w-96 h-96 bg-[#0E4A35]/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 -right-32 w-96 h-96 bg-[#9E7B3A]/5 rounded-full blur-3xl pointer-events-none" />
+    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-hidden">
+      {/* Background ambient lighting constrained within container */}
+      <div className="absolute top-1/3 left-0 w-72 h-72 bg-[#0E4A35]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 right-0 w-72 h-72 bg-[#9E7B3A]/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 relative z-10">
         {/* Section Header */}
