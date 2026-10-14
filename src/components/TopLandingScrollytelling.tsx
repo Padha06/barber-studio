@@ -15,9 +15,9 @@ const TOTAL_FRAMES = 290;
 // from mismatched crop math.
 const MOBILE_W = 540;
 const MOBILE_H = 960;
-// Mobile ships an expanded 180-frame set (40 drone & street intro + 140 luxury interior).
+// Mobile ships an expanded 170-frame set (35 drone/storefront intro + 135 balanced luxury interior).
 // Preloaded via createImageBitmap off-main-thread with zero GPU tearing.
-const MOBILE_TOTAL_FRAMES = 180;
+const MOBILE_TOTAL_FRAMES = 170;
 
 interface CaptionScene {
   id: number;
@@ -744,7 +744,7 @@ export default function TopLandingScrollytelling({
     <div
       ref={containerRef}
       id="hero"
-      className="relative bg-white w-full h-[560vh] md:h-[1120vh]"
+      className="relative bg-white w-full h-[480vh] md:h-[1120vh]"
     >
       {/* Sticky Fullscreen Landing Viewport: WHOLE SCREEN EDGE-TO-EDGE */}
       <div className="sticky top-0 left-0 w-full h-svh md:h-[100dvh] overflow-hidden flex items-center justify-center bg-[#0B1510]">
