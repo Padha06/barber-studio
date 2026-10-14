@@ -131,21 +131,19 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   const currentActive =
     SERVICES_DATA.find((s) => s.id === activeServiceId) || filtered[0] || SERVICES_DATA[0];
 
-  // Scroll tracking on both mobile & desktop: observe which card overlaps into view
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Mobile card references for scroll tracking
+  const mobileCardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     const handleScroll = () => {
-      const isMobile = window.innerWidth < 1024;
-      // On mobile, trigger point is right under the sticky image (~280px)
-      // On desktop, trigger point is mid-screen
-      const targetThreshold = isMobile ? 320 : window.innerHeight * 0.45;
+      if (window.innerWidth >= 1024) return; // Mobile only
+      const targetThreshold = 260; // Top overlap collision zone right beneath the sticky hero
 
-      for (let i = 0; i < cardRefs.current.length; i++) {
-        const el = cardRefs.current[i];
+      for (let i = 0; i < mobileCardRefs.current.length; i++) {
+        const el = mobileCardRefs.current[i];
         if (el) {
           const rect = el.getBoundingClientRect();
-          if (rect.top <= targetThreshold && rect.bottom >= targetThreshold) {
+          if (rect.top <= targetThreshold && rect.bottom >= targetThreshold - 40) {
             const srv = filtered[i];
             if (srv && srv.id !== activeServiceId) {
               setActiveServiceId(srv.id);
@@ -161,8 +159,8 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
   }, [filtered, activeServiceId]);
 
   return (
-    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-hidden">
-      {/* Background ambient lighting constrained within container */}
+    <section id="services" className="relative py-16 md:py-32 bg-[#ffffff] border-t border-black/5 overflow-hidden w-full max-w-[100vw]">
+      {/* Background ambient lighting constrained to 100vw */}
       <div className="absolute top-1/3 left-0 w-72 h-72 bg-[#0E4A35]/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-0 w-72 h-72 bg-[#9E7B3A]/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -233,12 +231,12 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
         </div>
 
         {/* =================================================================== */}
-        {/* MOBILE STACK ARCHITECTURE (< LG): STICKY IMAGE AT TOP + OVERLAPPING CARDS BELOW */}
+        {/* MOBILE STACK ARCHITECTURE (< LG): 1 STICKY HERO IMAGE + OVERLAPPING CARDS */}
         {/* =================================================================== */}
-        <div className="lg:hidden relative pb-16">
+        <div className="lg:hidden relative pb-20">
           {/* Card 1: Permanently visible sticky image frame (z-40) pinned at top */}
-          <div className="sticky top-16 z-40 pt-2 pb-2 bg-white/95 backdrop-blur-md">
-            <div className="relative h-48 w-full max-w-md mx-auto overflow-hidden rounded-2xl border-2 border-[#B48A3C]/40 bg-[#0F1F18] shadow-lg">
+          <div className="sticky top-14 z-40 pt-2 pb-2 bg-white">
+            <div className="relative h-44 w-full max-w-sm mx-auto overflow-hidden rounded-2xl border-2 border-[#B48A3C]/40 bg-[#0F1F18] shadow-lg">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentActive.id}
@@ -252,7 +250,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                     src={currentActive.image}
                     alt={currentActive.title}
                     fill
-                    sizes="100vw"
+                    sizes="(max-width: 768px) 100vw, 400px"
                     className="object-cover object-center"
                     priority
                   />
@@ -261,27 +259,27 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
               </AnimatePresence>
 
               {/* Top Pill inside sticky image */}
-              <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-[#D4B26A]/40 text-[#D4B26A] text-[9px] font-mono tracking-widest uppercase">
+              <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4B26A]/40 text-[#D4B26A] text-[9px] font-mono tracking-widest uppercase">
                 <Sparkles className="w-2.5 h-2.5" />
                 <span>{currentActive.duration} • SIGNATURE</span>
               </div>
 
               {/* Active Service Title & Price overlay on sticky photo */}
               <div className="absolute bottom-2.5 left-3 right-3 z-10 flex items-end justify-between gap-2">
-                <div>
+                <div className="max-w-[70%]">
                   <span className="text-[9px] font-mono font-bold tracking-widest uppercase text-[#D4B26A] block">
                     ACTIVE SERVICE
                   </span>
                   <h4
                     style={{ fontFamily: "var(--font-serif)" }}
-                    className="text-base font-bold text-white leading-tight line-clamp-1"
+                    className="text-sm font-bold text-white leading-tight truncate"
                   >
                     {currentActive.title}
                   </h4>
                 </div>
                 <span
                   style={{ fontFamily: "var(--font-serif)" }}
-                  className="text-xl font-bold text-[#EAD39C] flex-shrink-0"
+                  className="text-lg font-bold text-[#EAD39C] flex-shrink-0"
                 >
                   {currentActive.price}
                 </span>
@@ -297,23 +295,23 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                 <div
                   key={service.id}
                   ref={(el) => {
-                    cardRefs.current[idx] = el;
+                    mobileCardRefs.current[idx] = el;
                   }}
                   onClick={() => setActiveServiceId(service.id)}
                   style={{
-                    // Each card sticks below the image (image is ~200px tall), and stacks slightly
-                    top: `${275 + idx * 8}px`,
+                    // Sticky top pinned right under the 176px image + cascading stack
+                    top: `${240 + idx * 8}px`,
                     zIndex: 10 + idx,
                   }}
-                  className={`sticky rounded-2xl p-5 transition-all duration-300 border cursor-pointer ${
+                  className={`sticky rounded-2xl p-4 sm:p-5 transition-all duration-300 border cursor-pointer ${
                     isSelected
                       ? "bg-[#FAF8F4] border-[#0E4A35] shadow-[0_16px_36px_rgba(14,74,53,0.22)] ring-1 ring-[#0E4A35]"
                       : "bg-white border-black/10 shadow-[0_10px_25px_rgba(0,0,0,0.08)] opacity-95"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-start justify-between gap-3 mb-1.5">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 mb-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#0E4A35]" />
                         <span className="text-[9px] font-mono tracking-widest uppercase text-[#5F6661]">
                           0{idx + 1} • {service.duration}
@@ -321,7 +319,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                       </div>
                       <h3
                         style={{ fontFamily: "var(--font-serif)" }}
-                        className={`text-lg font-bold leading-snug transition-colors ${
+                        className={`text-base sm:text-lg font-bold leading-snug transition-colors ${
                           isSelected ? "text-[#0E4A35]" : "text-[#0F1F18]"
                         }`}
                       >
@@ -332,7 +330,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                     <div className="text-right flex-shrink-0">
                       <span
                         style={{ fontFamily: "var(--font-serif)" }}
-                        className="text-xl font-bold text-[#9E7B3A] block"
+                        className="text-lg sm:text-xl font-bold text-[#9E7B3A] block"
                       >
                         {service.price}
                       </span>
@@ -344,7 +342,7 @@ export default function ServicesSection({ onSelectService }: ServicesSectionProp
                   </p>
 
                   {/* Feature chips */}
-                  <div className="flex flex-wrap gap-1.5 mb-3.5">
+                  <div className="flex flex-wrap gap-1.5 mb-3">
                     {service.features.slice(0, 2).map((feat) => (
                       <span
                         key={feat}
